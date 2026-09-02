@@ -5,6 +5,7 @@ export type RunTrigger = "manual" | "cron";
 export type RunStatus =
   | "queued"
   | "running"
+  | "publishing"
   | "succeeded"
   | "failed"
   | "cancelled";

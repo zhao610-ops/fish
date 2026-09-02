@@ -16,6 +16,7 @@ export interface DashboardConfigSummary {
     publisher: {
       provider: string;
       accountId: string;
+      mode?: "draft" | "publish";
     };
     cover: {
       enabled: boolean;
@@ -78,6 +79,7 @@ export function createDashboardConfigSummary(
       publisher: {
         provider: article.publisher.provider,
         accountId: article.publisher.accountId,
+        mode: article.publisher.mode,
       },
       cover: {
         enabled: article.cover.enabled,

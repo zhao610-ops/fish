@@ -198,6 +198,61 @@ function checkProviderFeature(
 }
 
 function checkConfig(config: ResolvedTrendPublishConfig) {
+  const translation = config.features.article.translation;
+  const isTranslation = translation.mode === "translation";
+  if (isTranslation) {
+    const activeGrants = translation.grants.filter((grant) =>
+      grant.confirmed &&
+      (!grant.expiresAt || Date.parse(grant.expiresAt) > Date.now())
+    );
+    add(
+      activeGrants.length ? "pass" : "fail",
+      "全文译刊",
+      "来源授权",
+      activeGrants.length
+        ? `已确认 ${activeGrants.length} 项有效授权；仍需运营者核实范围`
+        : "没有已确认的有效授权，所有候选都会跳过",
+    );
+    checkRequired("全文译刊", "全文抓取", [[
+      "providers.fetch.jina.apiKey 或 providers.fetch.firecrawl.apiKey",
+      config.providers.fetch.jina.apiKey ||
+      config.providers.fetch.firecrawl.apiKey,
+    ]]);
+    const real = !config.features.article.dryRun;
+    add(
+      translation.coverMediaId ? "pass" : real ? "fail" : "warn",
+      "全文译刊",
+      "自有封面",
+      translation.coverMediaId
+        ? "已配置素材 ID，须属于本账号且已检查"
+        : "正式发送前需配置 translation.coverMediaId",
+    );
+    add(
+      translation.platformDisclosureConfirmed ? "pass" : real ? "fail" : "warn",
+      "全文译刊",
+      "AI 标识核验",
+      translation.platformDisclosureConfirmed
+        ? "运营者已确认，代码不会自动设置未实现的平台标识字段"
+        : "正式发送前须核实平台标识要求并确认",
+    );
+    add(
+      config.storage.artifacts.provider === "local"
+        ? "pass"
+        : real
+        ? "fail"
+        : "warn",
+      "全文译刊",
+      "原子去重存储",
+      "正式译刊仅支持本地/Docker 持久化文件存储",
+    );
+  } else {
+    add(
+      config.features.article.dryRun ? "warn" : "fail",
+      "全文译刊",
+      "历史组稿模式",
+      "editorial-preview 仅允许预览，不能真实发送",
+    );
+  }
   checkRequired("基础必填", "API 鉴权", [
     ["server.apiKey", config.server.apiKey],
   ]);
@@ -291,7 +346,7 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
   checkProviderFeature(
     "封面生图",
     `图片生成 (${config.features.article.cover.provider})`,
-    config.features.article.cover.enabled,
+    !isTranslation && config.features.article.cover.enabled,
     getImageGeneratorCheck(config, "cover").configured,
     getImageGeneratorCheck(config, "cover").requiredPaths,
     "未开启时封面生成会走本地兜底图。",
@@ -300,7 +355,7 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
   checkProviderFeature(
     "正文配图",
     `AI 智能配图 (${config.features.article.bodyImages.provider})`,
-    config.features.article.bodyImages.mode !== "off",
+    !isTranslation && config.features.article.bodyImages.mode !== "off",
     getImageGeneratorCheck(config, "body").configured,
     getImageGeneratorCheck(config, "body").requiredPaths,
     "开启后会按文章内容生成正文配图，失败时回退已有 media 图片布局。",
@@ -311,7 +366,7 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
   checkProviderFeature(
     "内容去重",
     `向量去重 (${config.features.article.deduplication.embeddingProvider} + ${dedupVectorStore})`,
-    config.features.article.deduplication.enabled,
+    !isTranslation && config.features.article.deduplication.enabled,
     embeddingProviderRegistry.get(EmbeddingProviderType.DASHSCOPE)
       .isConfigured(config) &&
       (dedupUsesSqlite

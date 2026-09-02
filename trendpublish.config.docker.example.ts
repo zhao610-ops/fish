@@ -44,7 +44,7 @@ export default defineConfig((runtime) => ({
       weixin: {
         appId: runtime.secret("WEIXIN_APP_ID"),
         appSecret: runtime.secret("WEIXIN_APP_SECRET"),
-        author: runtime.value("WEIXIN_AUTHOR", "AI Trend Publish"),
+        author: runtime.value("WEIXIN_AUTHOR", "公众号自动译刊"),
         // 多公众号时可在这里配置 accounts，并用 WEIXIN_ACCOUNT_ID 选择。
         accounts: {},
       },
@@ -64,10 +64,19 @@ export default defineConfig((runtime) => ({
 
   features: {
     article: {
+      // 按 docs/translation-publishing.md 核实授权，空列表不会转载文章。
+      translation: {
+        mode: "translation",
+        allowedTopics: ["编程教程", "AI 工具使用", "效率工具", "产品设计"],
+        grants: [],
+        coverMediaId: runtime.value("TRANSLATION_COVER_MEDIA_ID", ""),
+        platformDisclosureConfirmed: false,
+      },
       sources: splitList(
-        runtime.value("ARTICLE_SOURCES", "https://news.ycombinator.com/"),
+        runtime.value("ARTICLE_SOURCES", ""),
       ),
       publisher: {
+        mode: "draft",
         provider: runtime.value("WEIXIN_PUBLISH_PROVIDER", "weixin") as
           | "weixin"
           | "weixin-relay",

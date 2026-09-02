@@ -88,7 +88,7 @@ export function TriggerRunDialog(
                 ...basePayload,
                 accountId: accountId || undefined,
                 dryRun,
-                forcePublish: !dryRun,
+                forcePublish: false,
               });
             }
             onClose();
@@ -296,7 +296,7 @@ export function TriggerRunDialog(
                   onChange={(event) =>
                     setConfirmed(event.currentTarget.checked)}
                 />
-                我确认要执行真实发布流程，并创建微信公众号草稿。
+                我确认按所选文章方案执行：创建草稿或自动发表为公开文章。
               </label>
             </Alert>
           )}
@@ -315,7 +315,7 @@ export function TriggerRunDialog(
                 ? "开始矩阵 dry-run"
                 : dryRun
                 ? "开始 dry-run"
-                : "确认创建草稿"}
+                : "确认执行发布"}
             </Button>
           </Group>
         </Stack>

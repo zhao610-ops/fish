@@ -1,6 +1,7 @@
 services:
   trendpublish:
-    image: ghcr.io/liyown/ai-trend-publish:latest
+    build: .
+    image: trendpublish:local
     container_name: trendpublish
     restart: unless-stopped
     ports:

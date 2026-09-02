@@ -12,6 +12,7 @@ import {
   type ResolvedArticleRuntimeConfig,
 } from "@src/app/weixin-article/runtime/article-runtime-config.ts";
 import { parseArticleSources } from "@src/features/weixin-article/domain/article-source.ts";
+import { resolveTranslationPolicy } from "@src/features/weixin-article/domain/translation-policy.ts";
 import type {
   ArticleBodyImageMode,
   ArticleImageProvider,
@@ -367,6 +368,7 @@ export async function resolveArticleRuntimeConfig(
   next.features.article.publisher = {
     provider: article.publisher.provider,
     accountId: article.publisher.accountId ?? "",
+    mode: article.publisher.mode ?? "draft",
   };
 
   const llmModel = stringValue(llm.config.model);
@@ -582,6 +584,7 @@ export function defaultArticleProfileConfig(
     publisher: {
       provider: article.publisher.provider,
       accountId: article.publisher.accountId,
+      mode: article.publisher.mode ?? "draft",
     },
     cover: {
       enabled: article.cover.enabled,
@@ -651,6 +654,7 @@ export function readArticleConfig(
       provider: readPublisher(publisher.provider, fallback.publisher.provider),
       accountId: stringValue(publisher.accountId) ??
         fallback.publisher.accountId,
+      mode: readPublishMode(publisher.mode, fallback.publisher.mode ?? "draft"),
     },
     cover: {
       enabled: booleanValue(cover.enabled) ?? fallback.cover.enabled,
@@ -761,6 +765,8 @@ function articleConfigToResolvedFallback(
   config: ArticleFeatureProfileConfig,
 ): ResolvedTrendPublishConfig["features"]["article"] {
   return {
+    // 仅供后台旧字段解析的安全默认值；实际执行仍保留部署侧翻译策略。
+    translation: resolveTranslationPolicy(),
     sources: [],
     renderer: {
       template: config.renderer.template,
@@ -769,6 +775,7 @@ function articleConfigToResolvedFallback(
     publisher: {
       provider: config.publisher.provider,
       accountId: config.publisher.accountId,
+      mode: config.publisher.mode ?? "draft",
     },
     count: config.count,
     dryRun: config.dryRun,
@@ -1062,6 +1069,15 @@ function readTemplate(
   return text && allowed.includes(text as ArticleTemplateType)
     ? text as ArticleTemplateType
     : fallback;
+}
+
+function readPublishMode(
+  value: JsonValue | undefined,
+  fallback: "draft" | "publish",
+): "draft" | "publish" {
+  if (value === undefined) return fallback;
+  if (value === "draft" || value === "publish") return value;
+  throw new Error("发布模式必须为 draft（草稿）或 publish（自动发表）");
 }
 
 function readPublisher(

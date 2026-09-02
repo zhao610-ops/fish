@@ -281,6 +281,7 @@ function articleDraftFromConfig(
       "weixin-relay",
     ),
     publisherAccountId: readString(article, ["publisher", "accountId"], ""),
+    publisherMode: readString(article, ["publisher", "mode"], "draft"),
     coverEnabled: readBoolean(article, ["cover", "enabled"], false),
     coverImageProfileId: readString(article, ["cover", "imageProfileId"], "") ||
       firstCapabilityId(capabilities, "image-generation"),
@@ -346,6 +347,7 @@ function articlePatchFromDraft(draft: ArticleFormDraft) {
     publisher: {
       provider: draft.publisherProvider,
       accountId: draft.publisherAccountId.trim(),
+      mode: draft.publisherMode,
     },
     cover: {
       enabled: draft.coverEnabled,
@@ -444,6 +446,20 @@ function TrendProfileView(
               <option value="weixin-relay">微信 Relay</option>
               <option value="weixin">直连微信</option>
             </Select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="tp-muted text-xs font-medium">文章发表模式</span>
+            <Select
+              value={draft.publisherMode}
+              onChange={(event) =>
+                update("publisherMode", event.currentTarget.value)}
+            >
+              <option value="draft">仅创建草稿</option>
+              <option value="publish">自动发表为公开文章</option>
+            </Select>
+            <p className="tp-muted text-xs">
+              关闭预览后生效；自动发表成功后会记录公开文章链接。
+            </p>
           </label>
           <label className="space-y-1.5">
             <span className="tp-muted text-xs font-medium">公众号账号 ID</span>
@@ -2047,7 +2063,7 @@ export function RuntimeConfigPanel(
             <section className="tp-section rounded-md border p-4">
               <SectionTitle
                 title="定时"
-                description="本地、Docker、远程部署的 heartbeat 都会读取这里的规则。"
+                description="每分钟读取最新规则，按计划循环执行。修改后无需重启；执行时间是开始生成文章的时间，公开时间取决于生成耗时与微信审核。"
                 action={
                   <Button
                     size="sm"
@@ -2061,7 +2077,33 @@ export function RuntimeConfigPanel(
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1.5">
-                  <span className="tp-muted text-xs font-medium">Cron</span>
+                  <span className="tp-muted text-xs font-medium">
+                    每天执行时间
+                  </span>
+                  <Input
+                    type="time"
+                    value={/^(\d{1,2}) (\d{1,2}) \* \* \*$/.test(schedule.cron)
+                      ? `${schedule.cron.split(" ")[1].padStart(2, "0")}:${
+                        schedule.cron.split(" ")[0].padStart(2, "0")
+                      }`
+                      : ""}
+                    onChange={(event) => {
+                      const [hour, minute] = event.currentTarget.value.split(
+                        ":",
+                      );
+                      if (hour && minute) {
+                        setSchedule({
+                          ...schedule,
+                          cron: `${Number(minute)} ${Number(hour)} * * *`,
+                        });
+                      }
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="tp-muted text-xs font-medium">
+                    高级循环规则（Cron）
+                  </span>
                   <Input
                     value={schedule.cron}
                     onChange={(event) =>
@@ -2106,7 +2148,7 @@ export function RuntimeConfigPanel(
                         dryRun: event.currentTarget.checked,
                       })}
                   />
-                  定时 dry-run
+                  仅预览（关闭后按文章方案创建草稿或自动发表）
                 </label>
               </div>
             </section>

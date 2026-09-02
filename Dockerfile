@@ -26,4 +26,4 @@ USER deno
 
 EXPOSE 8000
 
-CMD ["deno", "task", "dev"]
+CMD ["deno", "run", "-A", "src/index.ts"]

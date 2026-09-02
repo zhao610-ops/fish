@@ -15,6 +15,34 @@ import { dirname, join, normalize, relative } from "node:path";
 export class LocalArtifactStore implements ArtifactStore {
   constructor(private readonly baseDir: string) {}
 
+  async claimJson(key: string, value: unknown): Promise<boolean> {
+    const path = this.resolveKey(key);
+    await Deno.mkdir(dirname(path), { recursive: true });
+    let file: Deno.FsFile;
+    try {
+      file = await Deno.open(path, {
+        write: true,
+        createNew: true,
+        mode: 0o600,
+      });
+    } catch (error) {
+      if (error instanceof Deno.errors.AlreadyExists) return false;
+      throw error;
+    }
+    // 写入中断也保留占位文件：宁可需要核对，不允许重复向微信提交。
+    try {
+      const bytes = encodeJsonArtifact(value);
+      let offset = 0;
+      while (offset < bytes.length) {
+        offset += await file.write(bytes.subarray(offset));
+      }
+      await file.sync();
+    } finally {
+      file.close();
+    }
+    return true;
+  }
+
   async putJson<T>(
     key: string,
     value: T,
@@ -60,7 +88,18 @@ export class LocalArtifactStore implements ArtifactStore {
   ): Promise<ArtifactRef> {
     const path = this.resolveKey(key);
     await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeFile(path, value);
+    const temporary = await Deno.makeTempFile({
+      dir: dirname(path),
+      prefix: ".artifact-",
+    });
+    try {
+      await Deno.writeFile(temporary, value);
+      await Deno.rename(temporary, path);
+    } finally {
+      await Deno.remove(temporary).catch((error) => {
+        if (!(error instanceof Deno.errors.NotFound)) throw error;
+      });
+    }
     return createArtifactRef(
       "local",
       key,

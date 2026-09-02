@@ -7,7 +7,10 @@ import {
   type ResolvedTrendPublishConfig,
   type ResolvedWeixinPublishAccountConfig,
 } from "@src/utils/config/define-config.ts";
-import type { PublishArticleRequest } from "@src/core/ports/content-publisher.ts";
+import type {
+  PublishArticleRequest,
+  PublishResult,
+} from "@src/core/ports/content-publisher.ts";
 import { redactSensitiveText } from "@src/utils/security/redact.ts";
 import { Logger } from "@zilla/logger";
 
@@ -94,8 +97,19 @@ Deno.serve({ port }, async (request) => {
         title: payload.title,
         digest: payload.digest,
         coverMediaId: payload.coverMediaId,
+        mode: payload.mode,
+        requestId: payload.requestId,
       });
       return ok(result);
+    }
+
+    if (
+      request.method === "POST" && url.pathname === "/api/weixin/publish-status"
+    ) {
+      const { account, payload } = await readRelayRequest<PublishResult>(
+        request,
+      );
+      return ok(await createPublisher(account).getPublishStatus(payload));
     }
 
     return json({ success: false, error: "Not Found" }, { status: 404 });

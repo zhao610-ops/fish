@@ -44,8 +44,7 @@ const queryClient = new QueryClient({
 
 const theme = createTheme({
   primaryColor: "blue",
-  fontFamily:
-    "Inter, IBM Plex Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  fontFamily: "Microsoft YaHei, 微软雅黑, sans-serif",
   defaultRadius: "md",
   headings: {
     fontWeight: "650",

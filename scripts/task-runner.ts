@@ -17,6 +17,16 @@ const CHECK_FILES = [
 ];
 
 const TEST_FILES = [
+  "src/integrations/fetch/providers/firecrawl-original.test.ts",
+  "src/features/weixin-article/services/translation.service.test.ts",
+  "src/features/weixin-article/translation-workflow.test.ts",
+  "src/platform/local/local-artifact-store.test.ts",
+  "src/features/weixin-article/services/article-run-mode.test.ts",
+  "src/integrations/publish/providers/weixin-publisher.test.ts",
+  "src/integrations/publish/providers/weixin-relay-publisher.test.ts",
+  "src/app/weixin-article/article-schedule-runner.test.ts",
+  "src/app/weixin-article/reconcile-publications.test.ts",
+  "src/platform/local/sqlite-run-state-store.test.ts",
   "src/architecture-boundaries.test.ts",
   "src/release-readiness.test.ts",
   "src/utils/config/define-config.test.ts",

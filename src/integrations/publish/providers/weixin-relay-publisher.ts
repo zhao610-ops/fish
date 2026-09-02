@@ -88,7 +88,20 @@ export class WeixinRelayPublisher
     );
     return {
       ...result,
+      provider: "weixin-relay",
       publishedAt: new Date(result.publishedAt),
+    };
+  }
+
+  async getPublishStatus(result: PublishResult): Promise<PublishResult> {
+    const response = await this.request<PublishResult>(
+      "/api/weixin/publish-status",
+      result,
+    );
+    return {
+      ...response,
+      provider: "weixin-relay",
+      publishedAt: new Date(response.publishedAt),
     };
   }
 
@@ -115,8 +128,9 @@ export class WeixinRelayPublisher
             account: this.resolveRelayAccount(),
             payload: body,
           }),
+          // HttpClient 的 retries 表示总尝试次数，1 表示不重试。
           retries: 1,
-          timeout: 30000,
+          timeout: path === "/api/weixin/publish" ? 120000 : 30000,
         },
       );
     } catch (error) {

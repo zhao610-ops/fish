@@ -4,6 +4,9 @@ export interface ContentPublisher {
 
   // 发布文章到指定平台
   publishArticle(request: PublishArticleRequest): Promise<PublishResult>;
+
+  // 查询已提交的发送结果，不重复提交文章。
+  getPublishStatus?(result: PublishResult): Promise<PublishResult>;
 }
 
 export interface ContentImageUploader {
@@ -18,6 +21,9 @@ export interface PublishArticleRequest {
   title: string;
   digest: string;
   coverMediaId: string;
+  mode?: "draft" | "publish";
+  /** 同一次运行保持不变，用于记录本次发表请求。 */
+  requestId?: string;
 }
 
 export interface PublishResult {
@@ -28,6 +34,10 @@ export interface PublishResult {
   platform: string;
   accountId?: string;
   reason?: string;
+  mode?: "draft" | "publish";
+  draftMediaId?: string;
+  articleId?: string;
+  provider?: "weixin" | "weixin-relay";
 }
 
 export type PublishStatus =

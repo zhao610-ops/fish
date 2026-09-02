@@ -1,4 +1,8 @@
 import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
+import {
+  resolveTranslationPolicy,
+  type TranslationPolicy,
+} from "@src/features/weixin-article/domain/translation-policy.ts";
 
 export type ArticleTemplateType =
   | "default"
@@ -256,6 +260,8 @@ export interface ArticleRendererConfig {
 
 /** 文章发布 provider 选择。 */
 export interface ArticlePublisherConfig {
+  /** draft 创建草稿；publish 自动发表为公开文章，需要公众号具备发表接口权限。 */
+  mode?: "draft" | "publish";
   /** 文章工作流使用的发布 provider。本地固定 IP 可用 "weixin"，Cloudflare 推荐 "weixin-relay"。 */
   provider?: ArticlePublisherProvider;
   /**
@@ -345,6 +351,8 @@ export interface ArticleQualityGateConfig {
 
 /** 微信文章工作流功能配置。 */
 export interface ArticleFeatureConfig {
+  /** 翻译与不可绕过的安全策略，仅由部署配置维护。 */
+  translation?: Partial<TranslationPolicy>;
   /**
    * 文章数据源 URL 列表。
    *
@@ -590,6 +598,7 @@ export interface ResolvedTrendPublishConfig {
   fetchGroups: Record<string, FetchProviderName[]>;
   features: {
     article: {
+      translation: TranslationPolicy;
       sources: string[];
       renderer: {
         template: ArticleTemplateType;
@@ -598,6 +607,7 @@ export interface ResolvedTrendPublishConfig {
       publisher: {
         provider: ArticlePublisherProvider;
         accountId: string;
+        mode: "draft" | "publish";
       };
       count: number;
       dryRun: boolean;
@@ -789,6 +799,12 @@ export function resolveTrendPublishConfig(
   const article = config.features?.article ?? {};
   const articleRenderer = article.renderer ?? {};
   const articlePublisher = article.publisher ?? {};
+  if (
+    articlePublisher.mode !== undefined &&
+    !["draft", "publish"].includes(articlePublisher.mode)
+  ) {
+    throw new Error("文章发表模式只能为 draft 或 publish");
+  }
   const coverProvider = article.cover?.provider ?? "dashscope";
   const bodyImageProvider = article.bodyImages?.provider ?? "dashscope";
   const weixinDefaultAccount = resolveWeixinAccountConfig(
@@ -888,6 +904,7 @@ export function resolveTrendPublishConfig(
     },
     features: {
       article: {
+        translation: resolveTranslationPolicy(article.translation),
         sources: article.sources ?? [],
         renderer: {
           template: articleRenderer.template ?? "minimal",
@@ -896,6 +913,7 @@ export function resolveTrendPublishConfig(
         publisher: {
           provider: articlePublisher.provider ?? "weixin",
           accountId: articlePublisher.accountId ?? "",
+          mode: articlePublisher.mode ?? "draft",
         },
         count: article.count ?? 10,
         dryRun: article.dryRun ?? true,

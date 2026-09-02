@@ -47,7 +47,9 @@ function formatDate(value?: string) {
 function statusTone(status?: RunStatus): BadgeTone {
   if (status === "succeeded") return "success";
   if (status === "failed" || status === "cancelled") return "danger";
-  if (status === "running" || status === "queued") return "info";
+  if (status === "running" || status === "queued" || status === "publishing") {
+    return "info";
+  }
   return "muted";
 }
 
@@ -489,6 +491,15 @@ function publishDecision(
       view: "runs",
     };
   }
+  if (latestRun.status === "publishing") {
+    return {
+      label: "等待微信发表结果",
+      detail: "文章已提交微信审核，系统会自动查询结果并保存公开链接。",
+      tone: "info",
+      action: "查看发表进度",
+      view: "runs",
+    };
+  }
   if (latestRun.status === "running" || latestRun.status === "queued") {
     return {
       label: "正在运行",
@@ -508,8 +519,8 @@ function publishDecision(
     };
   }
   return {
-    label: "草稿已创建",
-    detail: "最近一次真实发布已完成。可以到公众号后台继续编辑或发布。",
+    label: "本轮已完成",
+    detail: "查看运行结果，确认文章发表链接、草稿或质量检查结论。",
     tone: "success",
     action: "查看发布结果",
     view: "runs",

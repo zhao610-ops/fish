@@ -38,6 +38,14 @@ interface FirecrawlScrapeResult {
   success?: boolean;
   error?: string;
   extract?: unknown;
+  markdown?: string;
+  url?: string;
+  metadata?: {
+    title?: string;
+    sourceURL?: string;
+    statusCode?: number;
+    publishedTime?: string;
+  };
 }
 
 interface FirecrawlScrapeClient {
@@ -54,7 +62,10 @@ interface FirecrawlScrapeClient {
 export class FireCrawlScraper implements ContentScraper {
   private app!: FirecrawlApp;
 
-  constructor(private readonly configuredApiKey?: string) {}
+  constructor(
+    private readonly configuredApiKey?: string,
+    private readonly suppliedClient?: FirecrawlScrapeClient,
+  ) {}
 
   async refresh(): Promise<void> {
     const startTime = Date.now();
@@ -62,6 +73,7 @@ export class FireCrawlScraper implements ContentScraper {
     if (!apiKey) {
       throw new Error("providers.fetch.firecrawl.apiKey is not set");
     }
+    if (this.suppliedClient) return;
     this.app = new FirecrawlApp({
       apiKey,
     });
@@ -86,6 +98,37 @@ export class FireCrawlScraper implements ContentScraper {
       const startTime = Date.now();
       const currentDate = new Date().toLocaleDateString();
       const scrape = this.getScrapeClient();
+
+      if (options?.filters?.mode === "original-article") {
+        // 翻译必须拿原文，不能使用会翻译、摘要或改写的 LLM extract。
+        const result = await scrape(sourceId, {
+          formats: ["markdown"],
+          onlyMainContent: true,
+        });
+        const content = result.markdown?.trim();
+        const url = result.url ?? result.metadata?.sourceURL;
+        const title = result.metadata?.title;
+        if (
+          result.success === false || !content || !url || !title ||
+          (result.metadata?.statusCode && result.metadata.statusCode >= 400)
+        ) {
+          throw new Error(
+            "未获取带来源地址和标题的原文 Markdown，不能回退为提取摘要",
+          );
+        }
+        return [{
+          id: this.generateId(url),
+          title,
+          content,
+          url,
+          publishDate: result.metadata?.publishedTime ?? "",
+          metadata: {
+            source: "fireCrawl",
+            originalUrl: url,
+            originalMarkdown: true,
+          },
+        }];
+      }
 
       if (isArticleDetailMode(options)) {
         return await this.scrapeArticleDetail(sourceId, scrape, startTime);
@@ -235,7 +278,8 @@ export class FireCrawlScraper implements ContentScraper {
     url: string,
     params: Record<string, unknown>,
   ) => Promise<FirecrawlScrapeResult> {
-    const firecrawlClient = this.app as FirecrawlScrapeClient;
+    const firecrawlClient = this.suppliedClient ??
+      this.app as FirecrawlScrapeClient;
     const scrape = firecrawlClient.scrape?.bind(firecrawlClient) ??
       firecrawlClient.scrapeUrl?.bind(firecrawlClient);
 

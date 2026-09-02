@@ -35,7 +35,7 @@ function wrapPreviewHtml(content: string): string {
       background: #ffffff;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family: "Microsoft YaHei", sans-serif;
     }
   </style>
 </head>

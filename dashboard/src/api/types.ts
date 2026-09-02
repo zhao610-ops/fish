@@ -1,6 +1,7 @@
 export type RunStatus =
   | "queued"
   | "running"
+  | "publishing"
   | "succeeded"
   | "failed"
   | "cancelled";
@@ -357,6 +358,7 @@ export interface ArticleFormDraft {
   promptProfile: string;
   llmProfileId: string;
   publisherProvider: string;
+  publisherMode: string;
   publisherAccountId: string;
   coverEnabled: boolean;
   coverImageProfileId: string;

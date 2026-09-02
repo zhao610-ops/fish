@@ -2,11 +2,8 @@ import {
   createWeixinArticleDependencies,
   CreateWeixinArticleDependenciesOptions,
 } from "@src/app/weixin-article/create-weixin-article-dependencies.ts";
-import { LocalArtifactStore } from "@src/platform/local/local-artifact-store.ts";
-import { LocalJsonRunStateStore } from "@src/platform/local/local-json-run-state-store.ts";
-import { SQLiteEditorialMemoryStore } from "@src/platform/local/sqlite-editorial-memory-store.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
-import { join } from "node:path";
+import { createLocalArticleRuntimeStores } from "./local-runtime-stores.ts";
 
 export async function createLocalWeixinArticleDependencies(
   config: ResolvedTrendPublishConfig,
@@ -17,17 +14,13 @@ export async function createLocalWeixinArticleDependencies(
     >
     & { outputDir?: string } = {},
 ) {
-  const outputDir = options.outputDir ||
-    config.storage.artifacts.outputDir ||
-    config.storage.runState.outputDir ||
-    "src/temp";
-  const baseDir = join(Deno.cwd(), outputDir);
+  const stores = createLocalArticleRuntimeStores(config, options);
   return await createWeixinArticleDependencies(config, {
     ...options,
-    artifactStore: new LocalArtifactStore(baseDir),
-    runStateStore: new LocalJsonRunStateStore(baseDir),
+    artifactStore: stores.artifactStore,
+    runStateStore: stores.runStateStore,
     editorialMemoryStore: options.editorialMemoryStore ??
-      new SQLiteEditorialMemoryStore(config.storage.runtimeConfig.sqlitePath),
+      stores.editorialMemoryStore,
     mode: "local",
     vectorStoreFactory: options.vectorStoreFactory ?? (async () => {
       const { SQLiteVectorStore } = await import(

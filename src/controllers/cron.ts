@@ -8,6 +8,8 @@ import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { createArticleNotifier } from "@src/app/weixin-article/notifications.ts";
 import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
 import { seedArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import { ArticleScheduleRunner } from "@src/app/weixin-article/article-schedule-runner.ts";
+import { monitorPublications } from "@src/app/weixin-article/publication-monitor.ts";
 const logger = new Logger("cron");
 export enum WorkflowType {
   WeixinArticle = "weixin-article-workflow",
@@ -23,34 +25,28 @@ export function getWorkflow(type: WorkflowType) {
 export const startCronJobs = async () => {
   const config = await getAppConfig();
   const notifier = createArticleNotifier(config);
-  notifier.notify("定时任务启动", "定时任务启动");
-  logger.info("初始化定时任务...");
-
-  // Heartbeat 调度：具体业务时间由 Dashboard runtime config 控制。
-  cron.schedule(
-    "*/5 * * * *",
-    async () => {
+  const stores = createLocalArticleRuntimeStores(config);
+  await seedArticleRuntimeConfig(stores.runtimeConfigStore, config);
+  const report = (error: unknown) => {
+    logger.error("自动任务失败:", error);
+    void notifier.notify("自动任务失败", String(error)).catch((error) =>
+      logger.error("通知失败:", error)
+    );
+  };
+  const runner = new ArticleScheduleRunner(
+    stores.runtimeConfigStore,
+    async (due, runId) => {
+      await stores.runStateStore.startRun({
+        runId,
+        profileId: due.schedule.profileId,
+        mode: "local",
+        dryRun: due.schedule.dryRun,
+        trigger: "cron",
+      });
       try {
-        logger.info("检查到期微信文章工作流...");
-        const runtimeStores = createLocalArticleRuntimeStores(config);
-        await seedArticleRuntimeConfig(
-          runtimeStores.runtimeConfigStore,
-          config,
-        );
-        const dueSchedules = await runtimeStores.runtimeConfigStore
-          .listDueSchedules(new Date());
-        const runtime = new LocalWorkflowRuntime();
-        for (const due of dueSchedules) {
-          if (
-            !await runtimeStores.runtimeConfigStore.markScheduleTriggered(
-              due.schedule.id,
-              due.slot,
-            )
-          ) {
-            continue;
-          }
-          const runId = `cron-${crypto.randomUUID()}`;
-          await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
+        await new LocalWorkflowRuntime().run(
+          createLocalWeixinArticleWorkflowDefinition(),
+          {
             payload: {
               runId,
               trigger: "cron",
@@ -59,15 +55,35 @@ export const startCronJobs = async () => {
             },
             id: runId,
             timestamp: Date.now(),
-          });
-        }
+          },
+        );
       } catch (error) {
-        logger.error(`工作流执行失败:`, error);
-        notifier.notify("工作流执行失败", String(error));
+        await stores.runStateStore.failRun(
+          runId,
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
       }
     },
-    {
-      timezone: "Asia/Shanghai",
-    },
+    report,
   );
+  let checkingPublications = false;
+  const checkPublications = async () => {
+    if (checkingPublications) return;
+    checkingPublications = true;
+    try {
+      await monitorPublications(
+        config,
+        stores,
+        (error) => logger.error("发表结果查询失败，下轮重试:", error),
+      );
+    } finally {
+      checkingPublications = false;
+    }
+  };
+  logger.info("自动任务已启动，每分钟读取最新定时设置并检查发表结果");
+  return cron.schedule("* * * * *", () => {
+    void runner.tick().catch(report);
+    void checkPublications().catch(report);
+  }, { timezone: "Asia/Shanghai" });
 };

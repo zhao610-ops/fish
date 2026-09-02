@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { ContentScraper } from "@src/core/ports/content-scraper.ts";
 import { ArticleSource } from "@src/features/weixin-article/domain/article-source.ts";
 import { ArticleFetchRouter } from "./article-fetch-router.ts";
@@ -113,6 +113,37 @@ Deno.test("ArticleFetchRouter keeps original article when hydration is not riche
   assertEquals(result.content.title, "短标题");
   assertEquals(result.failures[0].provider, "jina");
   assertEquals(calls, ["jina"]);
+});
+
+Deno.test("全文接口接受等长详情，但不能返回摘要或错位地址", async () => {
+  const candidate = {
+    id: "full",
+    title: "标题",
+    content: "正文".repeat(200),
+    url: "https://example.com/",
+    publishDate: "",
+    metadata: {},
+  };
+  const router = new ArticleFetchRouter(
+    new Map([["jina", mockScraper("jina", [], [candidate])]]),
+  );
+  const result = await router.fetchFullArticle(candidate);
+  assertEquals(result.metadata.detailFetched, true);
+  assertEquals(result.content, candidate.content);
+  await assertRejects(() =>
+    router.fetchFullArticle({ ...candidate, url: "https://example.com/other" })
+  );
+  const failed = new ArticleFetchRouter(
+    new Map([["jina", mockScraper("jina", [], [], new Error("抓取失败"))]]),
+  );
+  await assertRejects(() => failed.fetchFullArticle(candidate));
+  const short = new ArticleFetchRouter(
+    new Map([[
+      "jina",
+      mockScraper("jina", [], [{ title: "摘要", content: "太短" }]),
+    ]]),
+  );
+  await assertRejects(() => short.fetchFullArticle(candidate));
 });
 
 function source(providers: ArticleSource["providers"]): ArticleSource {

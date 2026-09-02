@@ -20,6 +20,8 @@ export interface PutArtifactOptions {
 }
 
 export interface ArtifactStore {
+  /** 原子占用发送标记；不支持原子写入的存储不能用于自动翻译发表。 */
+  claimJson?(key: string, value: unknown): Promise<boolean>;
   putJson<T>(
     key: string,
     value: T,

@@ -36,6 +36,7 @@ export interface ArticleFeatureProfileConfig {
   publisher: {
     provider: "weixin" | "weixin-relay";
     accountId?: string;
+    mode?: "draft" | "publish";
   };
   cover: {
     enabled: boolean;

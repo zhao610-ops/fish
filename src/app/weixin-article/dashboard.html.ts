@@ -6,7 +6,7 @@ export function renderDashboardHtml(): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TrendPublish Dashboard</title>
   <style>
-    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #18181b; background: #fafafa; }
+    :root { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; color: #18181b; background: #fafafa; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
     section { max-width: 560px; border: 1px solid #e4e4e7; border-radius: 12px; background: white; padding: 24px; box-shadow: 0 1px 3px rgba(24,24,27,0.08); }
     h1 { margin: 0 0 10px; font-size: 20px; }

@@ -146,6 +146,43 @@ export class ArticleFetchRouter implements ArticleContentFetcher {
     };
   }
 
+  /** 翻译必须重抓文章详情；任何失败都不能回退为搜索摘要或 RSS 摘要。 */
+  async fetchFullArticle(content: ScrapedContent): Promise<ScrapedContent> {
+    const errors: string[] = [];
+    for (const provider of this.getHydrationProviders()) {
+      try {
+        const results = await this.getScraper(provider).scrape(content.url, {
+          limit: 1,
+          filters: { mode: "original-article" },
+        });
+        const requested = new URL(content.url);
+        requested.hash = "";
+        const exact = results.find((item) => {
+          const actual = new URL(item.url);
+          actual.hash = "";
+          return actual.href === requested.href &&
+            item.content.trim().length >= 300;
+        });
+        if (!exact) {
+          throw new Error("未返回请求文章的完整详情，拒绝使用摘要或其他链接");
+        }
+        return {
+          ...exact,
+          metadata: { ...exact.metadata, detailFetched: true },
+        };
+      } catch (error) {
+        errors.push(
+          `${provider}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    throw new Error(
+      `全文抓取失败，请配置 Jina 或 Firecrawl：${errors.join("；")}`,
+    );
+  }
+
   private getScraper(provider: ArticleFetchProvider): ContentScraper {
     const existing = this.scrapers.get(provider);
     if (existing) {

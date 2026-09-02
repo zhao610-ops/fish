@@ -26,6 +26,7 @@ import type {
   RuntimeMode,
 } from "@src/core/ports/run-state-store.ts";
 import type { EditorialMemoryStore } from "@src/core/ports/editorial-memory-store.ts";
+import type { ArticleTranslationService } from "./services/translation.service.ts";
 
 export interface WeixinArticlePublisher
   extends ContentPublisher, ContentImageUploader {
@@ -40,6 +41,7 @@ export interface WeixinArticleRuntimeDependencies {
 }
 
 export interface WeixinArticleDependencies {
+  translationService?: ArticleTranslationService;
   publisher: WeixinArticlePublisher;
   notifier: INotifier;
   scrapeService: WeixinArticleContentScrapeService;

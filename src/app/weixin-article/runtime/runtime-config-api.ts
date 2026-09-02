@@ -675,6 +675,10 @@ async function validateArticlePatch(
 
   const publisher = objectValue(patch.publisher);
   if (publisher) {
+    validateStringEnum(publisher.mode, "article.publisher.mode", [
+      "draft",
+      "publish",
+    ], issues);
     validateStringEnum(
       publisher.provider,
       "article.publisher.provider",

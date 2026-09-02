@@ -19,6 +19,40 @@ import {
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
 
+Deno.test("后台方案不能覆盖部署侧的翻译授权和主题门禁", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  config.features.article.translation.allowedTopics = ["编程教程"];
+  await seedArticleRuntimeConfig(store, config);
+  const profile = await getArticleRuntimeProfileDetail(store, config);
+  await saveArticleProfileConfig(store, config, profile.profile.id, {
+    translation: {
+      mode: "editorial-preview",
+      blockedTopics: [],
+      grants: [{ confirmed: true }],
+    },
+    qualityGate: {
+      ...profile.article.qualityGate,
+      enabled: false,
+      forcePublish: true,
+    },
+  });
+  const resolved = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    profile.profile.id,
+  );
+  assertEquals(
+    resolved.config.features.article.translation,
+    config.features.article.translation,
+  );
+  assertEquals(
+    resolved.config.features.article.translation.mode,
+    "translation",
+  );
+  assertEquals(resolved.config.features.article.translation.grants, []);
+});
+
 Deno.test("runtime config seeds article profile and shared capabilities", async () => {
   const store = new SQLiteRuntimeConfigStore(":memory:");
   const config = createConfig();
@@ -715,3 +749,45 @@ function createConfigSource(): TrendPublishConfig {
     },
   };
 }
+
+Deno.test("自动发表模式可保存到文章方案并在下次解析时生效", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+  await saveArticleProfileConfig(store, config, detail.profile.id, {
+    publisher: { ...detail.article.publisher, mode: "publish" },
+  });
+  const resolved = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    detail.profile.id,
+  );
+  assertEquals(resolved.config.features.article.publisher.mode, "publish");
+  await saveArticleProfileConfig(store, config, detail.profile.id, {
+    count: 3,
+  });
+  const next = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    detail.profile.id,
+  );
+  assertEquals(next.config.features.article.publisher.mode, "publish");
+});
+
+Deno.test("后台拒绝无效的发表模式", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+  const pathname = `/api/config/features/article/profiles/${detail.profile.id}`;
+  const response = await handleRuntimeConfigApi(
+    new Request(`http://localhost${pathname}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ article: { publisher: { mode: "unsupported" } } }),
+    }),
+    pathname,
+    store,
+    config,
+  );
+  assertEquals(response?.status, 400);
+});

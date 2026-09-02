@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -62,7 +63,9 @@ function formatSize(size?: number) {
 function statusTone(status: RunStatus | StepStatus) {
   if (status === "succeeded") return "success";
   if (status === "failed" || status === "cancelled") return "danger";
-  if (status === "running" || status === "queued") return "info";
+  if (status === "running" || status === "queued" || status === "publishing") {
+    return "info";
+  }
   return "muted";
 }
 
@@ -163,6 +166,7 @@ function RunList(
             <option value="all">全部状态</option>
             <option value="queued">queued</option>
             <option value="running">running</option>
+            <option value="publishing">等待微信发表结果</option>
             <option value="succeeded">succeeded</option>
             <option value="failed">failed</option>
             <option value="cancelled">cancelled</option>
@@ -295,6 +299,7 @@ function RunDetail(
         </div>
       </Card>
 
+      <PublicationStatusPanel run={run} apiKey={apiKey} />
       <RunFeedbackPanel run={run} apiKey={apiKey} profileId={profileId} />
 
       <MatrixRunPanel
@@ -410,6 +415,45 @@ function RunDetail(
           : <EmptyState>这个 run 暂无产物</EmptyState>}
       </Card>
     </div>
+  );
+}
+
+function PublicationStatusPanel(
+  { run, apiKey }: { run: ArticleRunDetail; apiKey: string },
+) {
+  const ref = run.artifacts.find((item) =>
+    item.key.endsWith("/14-publish-result.json")
+  );
+  const query = useQuery({
+    queryKey: ["publication-result", apiKey, run.runId, run.updatedAt],
+    enabled: !run.dryRun && Boolean(ref),
+    refetchInterval: run.status === "publishing" ? 8000 : false,
+    queryFn: () =>
+      apiJson<{ mode?: string; status: string; reason?: string; url?: string }>(
+        `/api/artifacts?key=${encodeURIComponent(ref?.key ?? "")}`,
+        apiKey,
+      ),
+  });
+  const result = query.data;
+  if (result?.mode !== "publish") return null;
+  const publicUrl = result.url?.startsWith("https://mp.weixin.qq.com/")
+    ? result.url
+    : undefined;
+  return (
+    <Card>
+      <h3 className="tp-title text-base font-semibold">文章发表结果</h3>
+      <p className="tp-muted mt-2 text-sm">{result.reason ?? result.status}</p>
+      {result.status === "published" && publicUrl && (
+        <a
+          className="mt-3 inline-block text-sm text-blue-600 underline"
+          href={publicUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          打开已发表文章
+        </a>
+      )}
+    </Card>
   );
 }
 

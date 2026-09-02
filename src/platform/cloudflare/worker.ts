@@ -1,3 +1,5 @@
+import { monitorPublications } from "@src/app/weixin-article/publication-monitor.ts";
+import { scheduleRunId } from "@src/app/weixin-article/article-schedule-runner.ts";
 import {
   WorkflowDefinition,
   WorkflowEvent,
@@ -974,24 +976,33 @@ export default {
     await seedArticleRuntimeConfig(runtimeConfigStore, config);
     const dueSchedules = await runtimeConfigStore.listDueSchedules(new Date());
     for (const due of dueSchedules) {
-      if (
-        !await runtimeConfigStore.markScheduleTriggered(
-          due.schedule.id,
-          due.slot,
-        )
-      ) {
-        continue;
+      try {
+        if (
+          !await runtimeConfigStore.markScheduleTriggered(
+            due.schedule.id,
+            due.slot,
+          )
+        ) {
+          continue;
+        }
+        const runId = await scheduleRunId(due.slot);
+        await env.WEIXIN_ARTICLE_WORKFLOW.create({
+          id: `${WEIXIN_ARTICLE_WORKFLOW_ID}-${runId}`,
+          params: {
+            dryRun: due.schedule.dryRun,
+            runId,
+            trigger: "cron",
+            profileId: due.schedule.profileId,
+          },
+        });
+      } catch (error) {
+        console.error("定时任务提交失败:", error);
       }
-      const runId = `cf-cron-${crypto.randomUUID()}`;
-      await env.WEIXIN_ARTICLE_WORKFLOW.create({
-        id: `${WEIXIN_ARTICLE_WORKFLOW_ID}-${runId}`,
-        params: {
-          dryRun: due.schedule.dryRun,
-          runId,
-          trigger: "cron",
-          profileId: due.schedule.profileId,
-        },
-      });
     }
+    await monitorPublications(
+      config,
+      createStores(env),
+      (error) => console.error("发表结果查询失败，下轮重试:", error),
+    );
   },
 };

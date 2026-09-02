@@ -14,6 +14,17 @@ import {
 export class MemoryArtifactStore implements ArtifactStore {
   private readonly objects = new Map<string, ArtifactObject>();
 
+  async claimJson(key: string, value: unknown): Promise<boolean> {
+    assertSafeArtifactKey(key);
+    if (this.objects.has(key)) return false;
+    const body = encodeJsonArtifact(value);
+    this.objects.set(key, {
+      ref: createArtifactRef("memory", key, "application/json"),
+      body,
+    });
+    return true;
+  }
+
   async putJson<T>(
     key: string,
     value: T,

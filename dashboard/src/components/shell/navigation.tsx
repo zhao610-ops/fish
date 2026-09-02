@@ -45,7 +45,7 @@ function navTone(status?: string) {
   if (status === "failed" || status === "cancelled") {
     return "border-[#fecaca] bg-[#fef2f2] text-[#b91c1c]";
   }
-  if (status === "running" || status === "queued") {
+  if (status === "running" || status === "queued" || status === "publishing") {
     return "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]";
   }
   return "border-[#e2e8f0] bg-[#f8fafc] text-[#475569]";

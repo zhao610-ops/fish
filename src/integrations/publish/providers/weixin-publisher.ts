@@ -272,6 +272,11 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
   async publishArticle(request: PublishArticleRequest): Promise<PublishResult> {
     try {
       const account = this.getAccount();
+      if (
+        request.mode && request.mode !== "draft" && request.mode !== "publish"
+      ) {
+        throw new Error("不支持的微信发送模式");
+      }
       // 上传草稿
       const draft = await this.uploadDraft(
         request.content,
@@ -279,18 +284,83 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
         request.digest,
         request.coverMediaId,
       );
+      if (!draft.media_id) throw new Error("微信未返回草稿 ID");
+      if (request.mode === "publish") {
+        const response = await this.apiClient.postJson<
+          { publish_id: string | number }
+        >(
+          "/cgi-bin/freepublish/submit",
+          await this.ensureAccessToken(),
+          { media_id: draft.media_id },
+        );
+        if (!response.publish_id) {
+          throw new Error("微信未返回发表任务 ID，需核对平台发表记录");
+        }
+        return {
+          publishId: String(response.publish_id),
+          draftMediaId: draft.media_id,
+          status: "pending",
+          publishedAt: new Date(),
+          platform: "weixin",
+          accountId: account.accountId,
+          mode: "publish",
+          provider: "weixin",
+          reason: "微信发表任务已受理，等待审核结果",
+        };
+      }
       return {
         publishId: draft.media_id,
         status: "draft",
         publishedAt: new Date(),
         platform: "weixin",
         accountId: account.accountId,
-        url: `https://mp.weixin.qq.com/s/${draft.media_id}`,
+        mode: "draft",
+        provider: "weixin",
       };
     } catch (error) {
       logger.error("微信发布失败:", redactError(error));
       throw error;
     }
+  }
+
+  async getPublishStatus(result: PublishResult): Promise<PublishResult> {
+    if (result.mode !== "publish" || result.status !== "pending") return result;
+    const response = await this.apiClient.postJson<{
+      publish_status: number;
+      article_id?: string;
+      article_detail?: { item?: { article_url: string }[] };
+      fail_idx?: number[];
+    }>(
+      "/cgi-bin/freepublish/get",
+      await this.ensureAccessToken(),
+      { publish_id: result.publishId },
+    );
+    if (response.publish_status === 0) {
+      const url = response.article_detail?.item?.[0]?.article_url;
+      if (!url) {
+        throw new Error("微信报告发表成功，但未返回文章链接，将继续查询");
+      }
+      return {
+        ...result,
+        status: "published",
+        articleId: response.article_id,
+        url,
+        reason: "文章已公开发表",
+      };
+    }
+    if (response.publish_status === 1) return result;
+    const reasons: Record<number, string> = {
+      2: "原创校验失败",
+      3: "发表失败",
+      4: "微信平台审核不通过",
+      5: "文章已删除",
+      6: "文章被平台封禁",
+    };
+    const reason = reasons[response.publish_status];
+    if (!reason) {
+      throw new Error(`未知的微信发表状态：${response.publish_status}`);
+    }
+    return { ...result, status: "failed", reason };
   }
 
   /**

@@ -100,7 +100,7 @@ export default defineConfig({
       weixin: {
         appId: "",
         appSecret: "",
-        author: "AI Trend Publish",
+        author: "公众号自动译刊",
         needOpenComment: true,
         onlyFansCanComment: false,
         /**
@@ -114,7 +114,7 @@ export default defineConfig({
           // main: {
           //   appId: "",
           //   appSecret: "",
-          //   author: "AI Trend Publish",
+          //   author: "公众号自动译刊",
           // },
           // lab: {
           //   appId: "",
@@ -209,6 +209,20 @@ export default defineConfig({
    */
   features: {
     article: {
+      // 授权由运营者核实；空列表不会转载文章，详见 docs/translation-publishing.md。
+      translation: {
+        mode: "translation",
+        allowedTopics: ["编程教程", "AI 工具使用", "效率工具", "产品设计"],
+        blockedTopics: [],
+        grants: [],
+        glossary: { workflow: "工作流" },
+        maxCandidates: 5,
+        maxSourceChars: 24000,
+        chunkChars: 2500,
+        minQualityScore: 80,
+        coverMediaId: "",
+        platformDisclosureConfirmed: false,
+      },
       /**
        * 文章数据源列表。
        *
@@ -216,17 +230,7 @@ export default defineConfig({
        * 再添加 `group:url` 前缀。
        */
       sources: [
-        "https://news.ycombinator.com/",
-        "web:https://example.com/ai-news",
-        "social:https://x.com/OpenAIDevs",
-        "reliableWeb:https://openai.com/news/",
-        "reliableWeb:https://www.anthropic.com/news",
-        "reliableWeb:https://blog.google/technology/ai/",
-        "reliableWeb:https://deepmind.google/discover/blog/",
-        "reliableWeb:https://ai.meta.com/blog/",
-        "search:AI agent research breakthrough latest",
-        "rss:https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-        "rss:https://huggingface.co/blog/feed.xml",
+        // 填写已核实允许访问的来源；转载范围另由 translation.grants 限制。
       ],
 
       /**
@@ -236,6 +240,8 @@ export default defineConfig({
        * - Cloudflare 等无固定出口 IP 环境：`weixin-relay`
        */
       publisher: {
+        // publish 自动发表为公开文章；draft 仅创建草稿。预览开关优先。
+        mode: "draft",
         provider: "weixin",
         // 多公众号发布目标。默认账号留空；使用 accounts 时填写 "main"、"lab" 等 accountId。
         accountId: "",

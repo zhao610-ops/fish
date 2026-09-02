@@ -42,7 +42,11 @@ import { WeixinArticleDraftService } from "@src/features/weixin-article/services
 import { WeixinArticleResearchService } from "@src/features/weixin-article/services/article-research.service.ts";
 import { WeixinArticleQualityReviewService } from "@src/features/weixin-article/services/quality-review.service.ts";
 import { WeixinArticleRevisionService } from "@src/features/weixin-article/services/article-revision.service.ts";
-import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import {
+  ResolvedTrendPublishConfig,
+  resolveWeixinPublishAccount,
+} from "@src/utils/config/define-config.ts";
+import { ArticleTranslationService } from "@src/features/weixin-article/services/translation.service.ts";
 import type { ArtifactStore } from "@src/core/ports/artifact-store.ts";
 import type {
   RunStateStore,
@@ -116,6 +120,21 @@ export async function createWeixinArticleDependencies(
   );
 
   return {
+    translationService: new ArticleTranslationService(
+      config.features.article.translation,
+      llmProvider,
+      articleFetchRouter,
+      artifactStore,
+      resolveWeixinPublishAccount(
+        config.providers.publish.weixin,
+        effectiveAccountId,
+      )?.account.appId ?? "unconfigured-preview",
+      Array.isArray(accountBrand?.forbiddenTopics)
+        ? accountBrand.forbiddenTopics.filter((topic): topic is string =>
+          typeof topic === "string"
+        )
+        : [],
+    ),
     publisher,
     notifier,
     scrapeService: new WeixinArticleContentScrapeService(
@@ -220,7 +239,9 @@ export async function createWeixinArticleDependencies(
       mode: options.mode ?? "local",
     },
     config: {
+      contentMode: config.features.article.translation.mode,
       dryRun: config.features.article.dryRun,
+      publishMode: config.features.article.publisher.mode,
       profileId: options.profileId,
       accountId: effectiveAccountId,
       accountBrand,
