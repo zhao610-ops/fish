@@ -62,3 +62,4 @@ tmp/
 *.sqlite
 *.sqlite3
 *.db
+config/runtime.env
