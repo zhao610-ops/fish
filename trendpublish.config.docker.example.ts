@@ -64,13 +64,11 @@ export default defineConfig((runtime) => ({
 
   features: {
     article: {
-      // 按 docs/translation-publishing.md 核实授权，空列表不会转载文章。
+      // 翻译配置说明见 docs/translation-publishing.md。
       translation: {
         mode: "translation",
         allowedTopics: ["编程教程", "AI 工具使用", "效率工具", "产品设计"],
-        grants: [],
         coverMediaId: runtime.value("TRANSLATION_COVER_MEDIA_ID", ""),
-        platformDisclosureConfirmed: false,
       },
       sources: splitList(
         runtime.value("ARTICLE_SOURCES", ""),

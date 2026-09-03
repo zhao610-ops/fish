@@ -1,4 +1,5 @@
 import { triggerWorkflow } from "./controllers/workflow.controller.ts";
+import { presentArticleRun } from "@src/app/weixin-article/run-presentation.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
@@ -16,6 +17,7 @@ import type {
   WeixinArticleWorkflowInput,
 } from "@src/app/weixin-article/workflow.definition.ts";
 import { Logger } from "@zilla/logger";
+import { createLocalWeixinArticleDependencies } from "@src/app/weixin-article/create-local-weixin-article-dependencies.ts";
 
 const logger = new Logger("server");
 
@@ -188,6 +190,45 @@ async function handleConfigSummaryRequest(req: Request): Promise<Response> {
 
   const config = await getAppConfig();
   const stores = createLocalArticleRuntimeStores(config);
+
+  if (
+    req.method === "GET" && new URL(req.url).pathname === "/api/article-library"
+  ) {
+    const profileId = new URL(req.url).searchParams.get("profileId") ??
+      undefined;
+    const resolved = await resolveArticleRuntimeConfig(
+      stores.runtimeConfigStore,
+      config,
+      profileId,
+    );
+    const dependencies = await createLocalWeixinArticleDependencies(
+      resolved.config,
+      {
+        profileId: resolved.profile.id,
+        accountId: resolved.account?.id,
+        accountBrand: resolved.account?.brand,
+      },
+    );
+    const library = await dependencies.translationService!.library(
+      resolved.profile.id,
+    );
+    return jsonResponse({
+      profileId: resolved.profile.id,
+      targetSize:
+        resolved.config.features.article.translation.libraryTargetSize,
+      articles: (await library.list()).map((entry) => ({
+        id: entry.id,
+        title: entry.article.title,
+        state: entry.state,
+        createdAt: entry.createdAt,
+        expiresAt: entry.expiresAt,
+        preparedRunId: entry.preparedRunId,
+        publishRunId: entry.publishRunId,
+        url: entry.url,
+        htmlRef: entry.htmlRef,
+      })),
+    });
+  }
   const runtimeConfig = await resolveArticleRuntimeConfig(
     stores.runtimeConfigStore,
     config,
@@ -257,6 +298,17 @@ async function handleRunsRequest(req: Request, pathname: string) {
     const payload = await req.json().catch(
       () => ({}),
     ) as WeixinArticleWorkflowInput;
+    if (
+      payload.articleAction &&
+      !["prepare", "publish-next"].includes(payload.articleAction)
+    ) return jsonResponse({ error: "无效的文章库操作" }, 400);
+    if (
+      payload.publishMode && !["draft", "publish"].includes(payload.publishMode)
+    ) return jsonResponse({ error: "无效的发表模式" }, 400);
+    if (
+      payload.libraryArticleId &&
+      !/^[a-f0-9]{64}$/.test(payload.libraryArticleId)
+    ) return jsonResponse({ error: "无效的库存文章编号" }, 400);
     const runId = typeof payload.runId === "string"
       ? payload.runId
       : `manual-${crypto.randomUUID()}`;
@@ -275,7 +327,11 @@ async function handleRunsRequest(req: Request, pathname: string) {
 
   if (req.method === "GET" && pathname === "/api/runs") {
     const runs = await stores.runStateStore.listRuns(100);
-    return jsonResponse({ runs });
+    return jsonResponse({
+      runs: await Promise.all(
+        runs.map((run) => presentArticleRun(run, stores.artifactStore)),
+      ),
+    });
   }
 
   const feedbackMatch = pathname.match(/^\/api\/runs\/([^/]+)\/feedback$/);
@@ -378,7 +434,9 @@ async function handleRunsRequest(req: Request, pathname: string) {
     if (!run) {
       return jsonResponse({ error: "run 不存在" }, 404);
     }
-    return jsonResponse({ run });
+    return jsonResponse({
+      run: await presentArticleRun(run, stores.artifactStore),
+    });
   }
 
   return jsonResponse({ error: "无效的 runs API" }, 404);
@@ -536,6 +594,9 @@ const handler = async (req: Request): Promise<Response> => {
         config,
       );
       if (response) return response;
+    }
+    if (url.pathname === "/api/article-library") {
+      return await handleConfigSummaryRequest(req);
     }
     if (url.pathname === "/api/runs" || url.pathname.startsWith("/api/runs/")) {
       return await handleRunsRequest(req, url.pathname);

@@ -68,8 +68,9 @@ fetchProviderRegistry.register({
   isConfigured: () => true,
   matches: (url) =>
     url.hostname.includes("rsshub") ||
-    url.pathname.endsWith(".rss") ||
-    url.pathname.endsWith(".xml"),
+    /\.(?:rss|xml|atom)$/i.test(url.pathname) ||
+    /\/(?:feed(?:\/rss2?)?|rss2?|atom)\/?$/i.test(url.pathname) ||
+    /^(?:rss2?|atom)$/i.test(url.searchParams.get("feed") ?? ""),
 });
 
 fetchProviderRegistry.register({

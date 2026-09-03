@@ -201,18 +201,6 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
   const translation = config.features.article.translation;
   const isTranslation = translation.mode === "translation";
   if (isTranslation) {
-    const activeGrants = translation.grants.filter((grant) =>
-      grant.confirmed &&
-      (!grant.expiresAt || Date.parse(grant.expiresAt) > Date.now())
-    );
-    add(
-      activeGrants.length ? "pass" : "fail",
-      "全文译刊",
-      "来源授权",
-      activeGrants.length
-        ? `已确认 ${activeGrants.length} 项有效授权；仍需运营者核实范围`
-        : "没有已确认的有效授权，所有候选都会跳过",
-    );
     checkRequired("全文译刊", "全文抓取", [[
       "providers.fetch.jina.apiKey 或 providers.fetch.firecrawl.apiKey",
       config.providers.fetch.jina.apiKey ||
@@ -226,14 +214,6 @@ function checkConfig(config: ResolvedTrendPublishConfig) {
       translation.coverMediaId
         ? "已配置素材 ID，须属于本账号且已检查"
         : "正式发送前需配置 translation.coverMediaId",
-    );
-    add(
-      translation.platformDisclosureConfirmed ? "pass" : real ? "fail" : "warn",
-      "全文译刊",
-      "AI 标识核验",
-      translation.platformDisclosureConfirmed
-        ? "运营者已确认，代码不会自动设置未实现的平台标识字段"
-        : "正式发送前须核实平台标识要求并确认",
     );
     add(
       config.storage.artifacts.provider === "local"

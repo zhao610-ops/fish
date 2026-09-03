@@ -209,19 +209,17 @@ export default defineConfig({
    */
   features: {
     article: {
-      // 授权由运营者核实；空列表不会转载文章，详见 docs/translation-publishing.md。
+      // 配置主题、翻译核验与封面，详见 docs/translation-publishing.md。
       translation: {
         mode: "translation",
         allowedTopics: ["编程教程", "AI 工具使用", "效率工具", "产品设计"],
         blockedTopics: [],
-        grants: [],
         glossary: { workflow: "工作流" },
         maxCandidates: 5,
         maxSourceChars: 24000,
         chunkChars: 2500,
         minQualityScore: 80,
         coverMediaId: "",
-        platformDisclosureConfirmed: false,
       },
       /**
        * 文章数据源列表。
@@ -230,7 +228,7 @@ export default defineConfig({
        * 再添加 `group:url` 前缀。
        */
       sources: [
-        // 填写已核实允许访问的来源；转载范围另由 translation.grants 限制。
+        // 填写用于发现文章的数据源；使用时遵守来源网站的访问和转载规则。
       ],
 
       /**

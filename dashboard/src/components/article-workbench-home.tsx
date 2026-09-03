@@ -1,4 +1,5 @@
 import React from "react";
+import { runStatusLabel } from "../api/run-status.ts";
 import {
   AlertCircle,
   ArrowRight,
@@ -201,7 +202,7 @@ export function ArticleWorkbenchHome(
                 最近运行
               </div>
               <div className="mt-1 text-xl font-semibold text-[var(--tp-ink)]">
-                {latestRun?.status ?? "未运行"}
+                {runStatusLabel(latestRun?.status)}
               </div>
             </div>
             <div className="tp-icon-tile grid size-10 place-items-center rounded-md">
@@ -287,7 +288,7 @@ export function ArticleWorkbenchHome(
                 </p>
               </div>
               <Badge tone={statusTone(latestRun?.status)}>
-                {latestRun?.status ?? "idle"}
+                {runStatusLabel(latestRun?.status)}
               </Badge>
             </div>
           </div>
@@ -506,6 +507,16 @@ function publishDecision(
       detail: "文章流程还在执行中。等待步骤完成后再审阅产物。",
       tone: "info",
       action: "查看进度",
+      view: "runs",
+    };
+  }
+  if (latestRun.status === "skipped") {
+    return {
+      label: "本轮未生成文章",
+      detail:
+        "候选未通过抓取或审核。请查看来源健康状态和翻译拒绝原因，再决定是否重跑。",
+      tone: "muted",
+      action: "查看跳过原因",
       view: "runs",
     };
   }

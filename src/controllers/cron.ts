@@ -10,6 +10,10 @@ import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-r
 import { seedArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import { ArticleScheduleRunner } from "@src/app/weixin-article/article-schedule-runner.ts";
 import { monitorPublications } from "@src/app/weixin-article/publication-monitor.ts";
+import { ArticleLibraryReplenisher } from "@src/app/weixin-article/article-library-replenisher.ts";
+import { resolveArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import { createLocalWeixinArticleDependencies } from "@src/app/weixin-article/create-local-weixin-article-dependencies.ts";
+import { translationKey } from "@src/features/weixin-article/domain/translation-policy.ts";
 const logger = new Logger("cron");
 export enum WorkflowType {
   WeixinArticle = "weixin-article-workflow",
@@ -68,6 +72,84 @@ export const startCronJobs = async () => {
     report,
   );
   let checkingPublications = false;
+  const replenisher = new ArticleLibraryReplenisher(
+    async () => {
+      const plans = [];
+      const active = (await stores.runStateStore.listRuns(100)).filter((run) =>
+        run.status === "running" || run.status === "queued"
+      );
+      for (
+        const profile of await stores.runtimeConfigStore.listFeatureProfiles(
+          "article",
+        )
+      ) {
+        const schedule = await stores.runtimeConfigStore.getSchedule(
+          profile.id,
+        );
+        if (
+          !profile.enabled || !schedule?.enabled || schedule.dryRun ||
+          active.some((run) => run.profileId === profile.id)
+        ) continue;
+        const resolved = await resolveArticleRuntimeConfig(
+          stores.runtimeConfigStore,
+          config,
+          profile.id,
+        );
+        if (
+          resolved.config.features.article.publisher.mode !== "publish" ||
+          resolved.config.features.article.translation.mode !== "translation"
+        ) continue;
+        const dependencies = await createLocalWeixinArticleDependencies(
+          resolved.config,
+          {
+            profileId: profile.id,
+            accountId: resolved.account?.id,
+            accountBrand: resolved.account?.brand,
+          },
+        );
+        const library = await dependencies.translationService!.library(
+          profile.id,
+        );
+        plans.push({
+          profileId: profile.id,
+          targetSize:
+            resolved.config.features.article.translation.libraryTargetSize,
+          readyCount: (await library.list()).filter((entry) =>
+            entry.state === "ready"
+          ).length,
+        });
+      }
+      return plans;
+    },
+    async (slot) =>
+      await stores.artifactStore.claimJson(
+        `library-replenishment/${await translationKey("slot", slot)}.json`,
+        { slot, at: new Date().toISOString() },
+      ),
+    async (profileId, slot) => {
+      const runId = `prepare-${await translationKey("slot", slot)}`;
+      await new LocalWorkflowRuntime().run(
+        createLocalWeixinArticleWorkflowDefinition(),
+        {
+          id: runId,
+          timestamp: Date.now(),
+          payload: {
+            runId,
+            profileId,
+            articleAction: "prepare",
+            dryRun: true,
+            trigger: "cron",
+          },
+        },
+      );
+      return Boolean(
+        await stores.artifactStore.getObject(
+          stores.artifactStore.createRunKey(runId, "library-entry", "json"),
+        ),
+      );
+    },
+    report,
+  );
   const checkPublications = async () => {
     if (checkingPublications) return;
     checkingPublications = true;
@@ -85,5 +167,6 @@ export const startCronJobs = async () => {
   return cron.schedule("* * * * *", () => {
     void runner.tick().catch(report);
     void checkPublications().catch(report);
+    void replenisher.tick().catch(report);
   }, { timezone: "Asia/Shanghai" });
 };

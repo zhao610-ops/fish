@@ -50,6 +50,7 @@ export interface MatrixRunComparisonReport {
 
 interface MatrixRunStatusCounts {
   total: number;
+  skipped: number;
   succeeded: number;
   failed: number;
   running: number;
@@ -62,6 +63,7 @@ export interface MatrixRunAggregation {
   summary: string;
   comparison: MatrixRunComparisonReport;
   total: number;
+  skipped: number;
   succeeded: number;
   failed: number;
   running: number;
@@ -106,6 +108,7 @@ export function buildMatrixRunSummary(
     `矩阵 ${mode} 批次`,
     `- 账号数: ${counts.total}`,
     `- 成功: ${counts.succeeded}`,
+    `- 跳过: ${counts.skipped}`,
     `- 失败: ${counts.failed}`,
     `- 进行中: ${counts.running}`,
     `- 等待: ${counts.queued}`,
@@ -225,8 +228,9 @@ export async function syncMatrixParentRun(
     ? mergeArtifactRefs(parent.artifacts, comparisonRef)
     : undefined;
 
-  if (aggregation.status === "succeeded") {
+  if (aggregation.status === "succeeded" || aggregation.status === "skipped") {
     await store.finishRun(parentRunId, {
+      status: aggregation.status,
       summary: aggregation.summary,
       ...(artifacts ? { artifacts } : {}),
     });
@@ -258,6 +262,7 @@ export async function syncMatrixParentRun(
 function countStatuses(children: ArticleRunRecord[]): MatrixRunStatusCounts {
   return {
     total: children.length,
+    skipped: children.filter((run) => run.status === "skipped").length,
     succeeded: children.filter((run) => run.status === "succeeded").length,
     failed: children.filter((run) => run.status === "failed").length,
     running: children.filter((run) => run.status === "running").length,
@@ -273,6 +278,7 @@ function resolveMatrixStatus(counts: MatrixRunStatusCounts): RunStatus {
     return counts.queued === counts.total ? "queued" : "running";
   }
   if (counts.failed > 0 || counts.cancelled > 0) return "failed";
+  if (counts.skipped === counts.total) return "skipped";
   return "succeeded";
 }
 

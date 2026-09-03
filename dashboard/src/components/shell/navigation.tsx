@@ -1,3 +1,4 @@
+import { runStatusLabel } from "../../api/run-status.ts";
 import {
   Database,
   FileText,
@@ -80,13 +81,13 @@ function navItems(config: NavConfig, latestRun: NavRun) {
     {
       view: "quality" as const,
       label: "质量复盘",
-      meta: latestRun?.status ?? "待复盘",
+      meta: runStatusLabel(latestRun?.status),
       icon: <ShieldCheck className="size-4" />,
     },
     {
       view: "runs" as const,
       label: "运行",
-      meta: latestRun?.status ?? "idle",
+      meta: runStatusLabel(latestRun?.status),
       icon: <Database className="size-4" />,
     },
     {
@@ -223,7 +224,7 @@ export function Sidebar(
               最近运行
             </div>
             <div className="tp-title mt-1 truncate text-sm font-semibold">
-              {latestRun?.status ?? "idle"}
+              {runStatusLabel(latestRun?.status)}
             </div>
           </div>
           <span

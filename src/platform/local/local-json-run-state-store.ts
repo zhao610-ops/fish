@@ -75,7 +75,7 @@ export class LocalJsonRunStateStore implements RunStateStore {
   ): Promise<void> {
     await this.updateRun(runId, {
       ...patch,
-      status: "succeeded",
+      status: patch.status === "skipped" ? "skipped" : "succeeded",
       finishedAt: nowIso(),
     });
   }

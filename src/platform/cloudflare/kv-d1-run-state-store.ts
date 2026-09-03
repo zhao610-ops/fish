@@ -64,7 +64,7 @@ export class KvD1RunStateStore implements RunStateStore {
   ): Promise<void> {
     await this.updateRun(runId, {
       ...patch,
-      status: "succeeded",
+      status: patch.status === "skipped" ? "skipped" : "succeeded",
       finishedAt: nowIso(),
     });
   }

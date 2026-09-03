@@ -1,21 +1,8 @@
-/** 授权由运营者核实，网页正文或模型输出不能授予转载权限。 */
-export interface TranslationSourceGrant {
-  id: string;
-  url: string;
-  match: "exact" | "prefix";
-  author: string;
-  license: "CC-BY-4.0" | "CC0-1.0" | "permission";
-  evidenceUrl: string;
-  confirmed: boolean;
-  expiresAt?: string;
-}
-
 export interface TranslationPolicy {
   /** 历史组稿模式只允许预览，不再允许绕过翻译安全流程发表。 */
   mode: "translation" | "editorial-preview";
   allowedTopics: string[];
   blockedTopics: string[];
-  grants: TranslationSourceGrant[];
   glossary: Record<string, string>;
   maxCandidates: number;
   maxSourceChars: number;
@@ -23,8 +10,9 @@ export interface TranslationPolicy {
   minQualityScore: number;
   /** 必须是本账号已上传并检查过的自有封面，不使用原项目的默认素材。 */
   coverMediaId: string;
-  /** 运营者须核实当前账号和接口可以满足平台的生成内容标识要求。 */
-  platformDisclosureConfirmed: boolean;
+  /** 待发库存目标；0 关闭自动备稿。仅已启用的正式发表定时会自动补库。 */
+  libraryTargetSize: number;
+  libraryMaxAgeHours: number;
 }
 
 export const REQUIRED_BLOCKED_TOPICS = [
@@ -56,32 +44,6 @@ export function resolveTranslationPolicy(
   ) {
     throw new Error("排除主题必须是文本列表");
   }
-  const grants = input.grants ?? [];
-  if (!Array.isArray(grants)) throw new Error("授权来源必须是列表");
-  for (const grant of grants) {
-    safeSourceUrl(grant.url);
-    safeSourceUrl(grant.evidenceUrl);
-    if (
-      !grant.id?.trim() || !grant.author?.trim() ||
-      !["exact", "prefix"].includes(grant.match) ||
-      !["CC-BY-4.0", "CC0-1.0", "permission"].includes(grant.license) ||
-      typeof grant.confirmed !== "boolean"
-    ) {
-      throw new Error("授权项缺少编号、作者、匹配方式或支持的许可类型");
-    }
-    if (
-      grant.match === "prefix" &&
-      (!new URL(grant.url).pathname.endsWith("/") || new URL(grant.url).search)
-    ) {
-      throw new Error("目录授权地址必须以 / 结尾；单篇文章请使用 exact");
-    }
-    if (grant.expiresAt && !Number.isFinite(Date.parse(grant.expiresAt))) {
-      throw new Error("授权到期时间无效");
-    }
-  }
-  if (new Set(grants.map((g) => g.id)).size !== grants.length) {
-    throw new Error("授权编号不能重复");
-  }
   const glossary = input.glossary ?? {};
   if (
     !glossary || Array.isArray(glossary) || typeof glossary !== "object" ||
@@ -95,14 +57,14 @@ export function resolveTranslationPolicy(
     mode: input.mode ?? "translation",
     allowedTopics: allowedTopics.map((x) => x.trim()),
     blockedTopics: [...new Set([...REQUIRED_BLOCKED_TOPICS, ...additional])],
-    grants,
     glossary,
     maxCandidates: bounded(input.maxCandidates, 5, 1, 20),
     maxSourceChars: bounded(input.maxSourceChars, 24000, 1000, 40000),
     chunkChars: bounded(input.chunkChars, 2500, 500, 4000),
     minQualityScore: bounded(input.minQualityScore, 80, 60, 100),
     coverMediaId: input.coverMediaId?.trim() ?? "",
-    platformDisclosureConfirmed: input.platformDisclosureConfirmed === true,
+    libraryTargetSize: bounded(input.libraryTargetSize, 3, 0, 10),
+    libraryMaxAgeHours: bounded(input.libraryMaxAgeHours, 72, 1, 168),
   };
 }
 
@@ -135,29 +97,6 @@ export function safeSourceUrl(value: string): URL {
   return url;
 }
 
-export function findTranslationGrant(
-  policy: TranslationPolicy,
-  value: string,
-  now = Date.now(),
-): TranslationSourceGrant {
-  const url = safeSourceUrl(value);
-  const candidates = policy.grants.filter((grant) => {
-    if (
-      !grant.confirmed ||
-      (grant.expiresAt && Date.parse(grant.expiresAt) <= now)
-    ) return false;
-    const scope = safeSourceUrl(grant.url);
-    return scope.origin === url.origin &&
-      (grant.match === "exact"
-        ? scope.href === url.href
-        : !scope.search && url.pathname.startsWith(scope.pathname));
-  }).sort((a, b) => b.url.length - a.url.length);
-  if (!candidates[0]) {
-    throw new Error("文章不在已确认且有效的翻译转载授权范围内");
-  }
-  return candidates[0];
-}
-
 export async function translationKey(
   scope: string,
   value: string,
@@ -170,4 +109,16 @@ export async function translationKey(
     new Uint8Array(digest),
     (byte) => byte.toString(16).padStart(2, "0"),
   ).join("");
+}
+
+/** 去掉仅用于统计的参数，避免同一篇库存因 RSS 跟踪参数变化被重复备稿。 */
+export function canonicalArticleUrl(value: string): string {
+  const url = safeSourceUrl(value);
+  for (const key of [...url.searchParams.keys()]) {
+    if (/^utm_/i.test(key) || /^(fbclid|gclid)$/i.test(key)) {
+      url.searchParams.delete(key);
+    }
+  }
+  url.searchParams.sort();
+  return url.href;
 }

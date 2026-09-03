@@ -20,6 +20,8 @@ export interface PutArtifactOptions {
 }
 
 export interface ArtifactStore {
+  /** 列出指定目录的直接子文件，用于本地持久化待发文章库。 */
+  listKeys?(directory: string): Promise<string[]>;
   /** 原子占用发送标记；不支持原子写入的存储不能用于自动翻译发表。 */
   claimJson?(key: string, value: unknown): Promise<boolean>;
   putJson<T>(

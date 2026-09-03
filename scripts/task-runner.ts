@@ -19,9 +19,12 @@ const CHECK_FILES = [
 ];
 
 const TEST_FILES = [
+  "src/app/weixin-article/run-presentation.test.ts",
   "scripts/docker.test.ts",
   "src/integrations/fetch/providers/firecrawl-original.test.ts",
   "src/features/weixin-article/services/translation.service.test.ts",
+  "src/features/weixin-article/services/article-library.service.test.ts",
+  "src/app/weixin-article/article-library-replenisher.test.ts",
   "src/features/weixin-article/translation-workflow.test.ts",
   "src/platform/local/local-artifact-store.test.ts",
   "src/features/weixin-article/services/article-run-mode.test.ts",

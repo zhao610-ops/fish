@@ -14,6 +14,14 @@ import {
 export class MemoryArtifactStore implements ArtifactStore {
   private readonly objects = new Map<string, ArtifactObject>();
 
+  async listKeys(directory: string): Promise<string[]> {
+    assertSafeArtifactKey(directory);
+    return [...this.objects.keys()].filter((key) =>
+      key.startsWith(`${directory}/`) &&
+      !key.slice(directory.length + 1).includes("/")
+    ).sort();
+  }
+
   async claimJson(key: string, value: unknown): Promise<boolean> {
     assertSafeArtifactKey(key);
     if (this.objects.has(key)) return false;

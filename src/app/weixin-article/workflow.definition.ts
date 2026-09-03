@@ -16,6 +16,10 @@ import type { ResolvedArticleRuntimeConfig } from "@src/app/weixin-article/runti
 import type { ArticleSourceFilter } from "@src/features/weixin-article/services/content-scrape.service.ts";
 
 export interface WeixinArticleWorkflowInput {
+  articleAction?: "prepare" | "publish-next";
+  libraryArticleId?: string;
+  /** 仅本次运行覆盖发表模式，不修改每日定时规则。 */
+  publishMode?: "draft" | "publish";
   sourceType?: ArticleSourceFilter;
   maxArticles?: number;
   forcePublish?: boolean;

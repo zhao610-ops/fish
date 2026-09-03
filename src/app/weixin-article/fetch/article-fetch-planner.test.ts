@@ -14,6 +14,23 @@ Deno.test("inferProvider routes common URLs", () => {
     "rss",
   );
   assertEquals(inferProvider("https://example.com/feed.xml"), "rss");
+  for (
+    const url of [
+      "https://www.nngroup.com/feed/rss/",
+      "https://uxdesign.cc/feed",
+      "https://www.pewresearch.org/feed/",
+      "https://www.cbinsights.com/research/feed/",
+      "https://example.org/ATOM",
+      "https://example.org/?feed=rss2",
+    ]
+  ) assertEquals(inferProvider(url), "rss");
+  for (
+    const url of [
+      "https://example.org/feedback",
+      "https://example.org/feed/article",
+      "https://example.org/?feed=news",
+    ]
+  ) assertEquals(inferProvider(url), "firecrawl");
   assertEquals(inferProvider("https://news.ycombinator.com/"), "firecrawl");
   assertEquals(inferProvider("AI agent news", "query"), "jina-search");
 });

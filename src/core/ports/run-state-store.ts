@@ -6,6 +6,7 @@ export type RunStatus =
   | "queued"
   | "running"
   | "publishing"
+  | "skipped"
   | "succeeded"
   | "failed"
   | "cancelled";
@@ -72,7 +73,9 @@ export interface RunStateStore {
   ): Promise<void>;
   finishRun(
     runId: string,
-    patch?: Partial<Pick<ArticleRunRecord, "summary" | "artifacts">>,
+    patch?: Partial<Pick<ArticleRunRecord, "summary" | "artifacts">> & {
+      status?: "succeeded" | "skipped";
+    },
   ): Promise<void>;
   failRun(runId: string, error: string): Promise<void>;
   startStep(

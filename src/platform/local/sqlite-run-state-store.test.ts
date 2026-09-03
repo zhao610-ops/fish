@@ -2,6 +2,30 @@ import { assertEquals } from "@std/assert";
 import { SQLiteRunStateStore } from "./sqlite-run-state-store.ts";
 import { LocalJsonRunStateStore } from "./local-json-run-state-store.ts";
 
+Deno.test("跳过状态写入持久化存储，重建实例仍保留完成时间", async () => {
+  for (const Store of [LocalJsonRunStateStore, SQLiteRunStateStore]) {
+    const directory = await Deno.makeTempDir();
+    try {
+      const store = new Store(directory);
+      await store.startRun({
+        runId: "skip",
+        mode: "local",
+        dryRun: true,
+        trigger: "manual",
+      });
+      await store.finishRun("skip", {
+        status: "skipped",
+        summary: "未生成文章",
+      });
+      const run = await new Store(directory).getRun("skip");
+      assertEquals(run?.status, "skipped");
+      assertEquals(typeof run?.finishedAt, "string");
+    } finally {
+      await Deno.remove(directory, { recursive: true });
+    }
+  }
+});
+
 Deno.test("多个存储实例更新不同运行和步骤时不会覆盖记录，重建实例可恢复", async () => {
   const directory = await Deno.makeTempDir();
   try {

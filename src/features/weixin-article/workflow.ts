@@ -35,6 +35,8 @@ import {
   createAccountLearningSnapshot,
 } from "@src/features/weixin-article/services/account-learning-snapshot.ts";
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
+import type { LibraryArticleView } from "./services/article-library.service.ts";
+import type { TranslationSelection } from "./services/translation.service.ts";
 
 const logger = new Logger("weixin-article-workflow");
 
@@ -44,6 +46,9 @@ interface WeixinWorkflowEnv {
 }
 
 interface WeixinWorkflowParams {
+  articleAction?: "prepare" | "publish-next";
+  libraryArticleId?: string;
+  publishMode?: "draft" | "publish";
   sourceType?: ArticleSourceFilter;
   maxArticles?: number;
   forcePublish?: boolean;
@@ -85,7 +90,9 @@ export class WeixinArticleWorkflow {
     step: WorkflowStepContext,
   ): Promise<void> {
     const runId = event.payload.runId ?? event.id ?? crypto.randomUUID();
-    const dryRun = await this.isDryRun(event);
+    const dryRun = event.payload.articleAction === "prepare"
+      ? true
+      : await this.isDryRun(event);
     const artifactStore = this.dependencies.runtime.artifactStore;
     const runStateStore = this.dependencies.runtime.runStateStore;
 
@@ -108,8 +115,14 @@ export class WeixinArticleWorkflow {
       );
       if (!dryRun && this.dependencies.config.contentMode !== "translation") {
         throw new WorkflowTerminateError(
-          "旧摘要编排流程仅允许预览；真实发布必须启用全文翻译与授权门禁",
+          "旧摘要编排流程仅允许预览；真实发布必须启用全文翻译与审核流程",
         );
+      }
+      if (
+        event.payload.articleAction &&
+        this.dependencies.config.contentMode !== "translation"
+      ) {
+        throw new Error("文章库仅支持全文翻译模式");
       }
       if (this.dependencies.config.contentMode === "translation") {
         if (!this.dependencies.translationService) {
@@ -148,6 +161,9 @@ export class WeixinArticleWorkflow {
         }
         const isWhitelisted = await this.dependencies.publisher
           .validateIpWhitelist();
+        if (isWhitelisted === false) {
+          throw new WorkflowTerminateError("微信白名单验证未通过");
+        }
         if (typeof isWhitelisted === "string") {
           this.dependencies.notifier.warning(
             "IP白名单验证失败",
@@ -159,6 +175,28 @@ export class WeixinArticleWorkflow {
         }
         return { result: isWhitelisted };
       });
+
+      if (
+        this.dependencies.translationService &&
+        (!dryRun || event.payload.articleAction === "publish-next")
+      ) {
+        const library = await this.dependencies.translationService.library(
+          event.payload.profileId ?? this.dependencies.config.profileId,
+        );
+        const ready = (await library.list()).filter((entry) =>
+          entry.state === "ready"
+        );
+        const entry = event.payload.libraryArticleId
+          ? ready.find((item) => item.id === event.payload.libraryArticleId)
+          : ready[0];
+        if (entry || event.payload.articleAction === "publish-next") {
+          await this.runTranslation(step, runId, dryRun, [], {
+            ...event.payload,
+            libraryEntry: entry,
+          });
+          return;
+        }
+      }
 
       await this.dependencies.notifier.info(
         "工作流开始",
@@ -226,7 +264,13 @@ export class WeixinArticleWorkflow {
       }
 
       if (this.dependencies.config.contentMode === "translation") {
-        await this.runTranslation(step, runId, dryRun, allContentsForGuard);
+        await this.runTranslation(
+          step,
+          runId,
+          dryRun,
+          allContentsForGuard,
+          event.payload,
+        );
         return;
       }
 
@@ -1023,10 +1067,19 @@ export class WeixinArticleWorkflow {
     runId: string,
     dryRun: boolean,
     contents: ScrapedContent[],
+    options: {
+      articleAction?: "prepare" | "publish-next";
+      libraryEntry?: LibraryArticleView;
+      publishMode?: "draft" | "publish";
+      profileId?: string;
+    } = {},
   ): Promise<void> {
     const service = this.dependencies.translationService!;
     const store = this.dependencies.runtime.artifactStore;
     const runs = this.dependencies.runtime.runStateStore;
+    const library = await service.library(
+      options.profileId ?? this.dependencies.config.profileId,
+    );
     const selection = await this.runTrackedStep(
       step,
       runId,
@@ -1040,7 +1093,51 @@ export class WeixinArticleWorkflow {
           store.createRunKey(runId, "translation-policy", "json"),
           service.policy,
         );
-        const result = await service.select(contents, runId);
+        let result: TranslationSelection;
+        if (options.libraryEntry) {
+          const entry = options.libraryEntry;
+          try {
+            await service.assertFinalSafe(
+              entry.article.title,
+              entry.article.html,
+            );
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes("成稿安全门禁拦截")
+            ) await library.block(entry, error.message);
+            throw error;
+          }
+          const selected = await store.putJson(
+            store.createRunKey(runId, "library-selected", "json"),
+            { id: entry.id, preparedRunId: entry.preparedRunId },
+          );
+          result = {
+            article: entry.article,
+            rejected: [],
+            artifacts: [selected],
+          };
+        } else if (options.articleAction === "publish-next") {
+          result = {
+            rejected: [{
+              url: "",
+              stage: "文章库",
+              reason: "没有未过期且符合当前策略的待发文章",
+            }],
+            artifacts: [],
+          };
+        } else {
+          const excluded = options.articleAction === "prepare"
+            ? new Set(
+              (await library.list()).filter((entry) =>
+                entry.state === "ready" || entry.state === "reserved" ||
+                (entry.state === "blocked" &&
+                  entry.policyKey === library.policyKey)
+              ).map((entry) => entry.article.sourceUrl),
+            )
+            : undefined;
+          result = await service.select(contents, runId, excluded);
+        }
         const ref = await store.putJson(
           store.createRunKey(runId, "translation-selection", "json"),
           result,
@@ -1072,9 +1169,23 @@ export class WeixinArticleWorkflow {
             platform: "weixin",
             publishedAt: new Date(),
             reason:
-              `没有通过来源授权、完整性、主题与翻译审核的文章；跳过 ${selection.rejected.length} 篇`,
+              `没有通过完整性、主题与翻译审核的文章；跳过 ${selection.rejected.length} 篇`,
           };
         } else {
+          if (options.articleAction === "prepare") {
+            const entry = await library.add(article, runId);
+            refs.push(
+              await store.putJson(
+                store.createRunKey(runId, "library-entry", "json"),
+                {
+                  id: entry.id,
+                  expiresAt: entry.expiresAt,
+                  preparedRunId: entry.preparedRunId,
+                },
+                { label: "已入库待发" },
+              ),
+            );
+          }
           refs.push(
             await store.putJson(
               store.createRunKey(runId, "18-final-title", "json"),
@@ -1100,6 +1211,12 @@ export class WeixinArticleWorkflow {
               url: preview.key,
             };
           } else {
+            if (
+              options.libraryEntry &&
+              !await library.reserve(options.libraryEntry, runId)
+            ) {
+              throw new Error("待发文章已被其他任务占用或过期，禁止重复发送");
+            }
             // 所有发布入口均经过门禁；不读取 forcePublish，也不读取旧质量门禁的启用开关。
             await service.reserve(article, runId);
             result = await this.publishArticle(
@@ -1107,6 +1224,7 @@ export class WeixinArticleWorkflow {
               article.title,
               service.policy.coverMediaId,
               runId,
+              options.publishMode,
             );
           }
         }
@@ -1118,7 +1236,9 @@ export class WeixinArticleWorkflow {
       },
     );
     const result = await store.getJson<PublishResult>(publishRef);
-    const summary = `全文译刊：${article?.title ?? "本轮跳过"}；${
+    const summary = `${
+      options.articleAction === "prepare" && article ? "已入库待发" : "全文译刊"
+    }：${article?.title ?? "本轮跳过"}；${
       formatPublishSummary(result, dryRun)
     }；拒绝 ${selection.rejected.length} 篇。`;
     const completion = {
@@ -1129,7 +1249,10 @@ export class WeixinArticleWorkflow {
       await runs.updateRun(runId, { ...completion, status: "publishing" });
     } else if (result.status === "failed") {
       await runs.failRun(runId, result.reason ?? "微信发布失败");
-    } else await runs.finishRun(runId, completion);
+    } else {await runs.finishRun(runId, {
+        ...completion,
+        status: result.status === "blocked" ? "skipped" : "succeeded",
+      });}
     try {
       if (result.status === "blocked" || result.status === "failed") {
         await this.dependencies.notifier.warning("译刊未发布", summary);
@@ -1196,6 +1319,7 @@ export class WeixinArticleWorkflow {
     summaryTitle: string,
     mediaId: string,
     runId: string,
+    publishMode?: "draft" | "publish",
   ): Promise<PublishResult> {
     logger.info("[发布] 发布到微信公众号");
     const store = this.dependencies.runtime.artifactStore;
@@ -1214,7 +1338,7 @@ export class WeixinArticleWorkflow {
       title: summaryTitle,
       digest: summaryTitle,
       coverMediaId: mediaId,
-      mode: this.dependencies.config.publishMode ?? "draft",
+      mode: publishMode ?? this.dependencies.config.publishMode ?? "draft",
       requestId: runId,
     });
   }
@@ -1347,10 +1471,10 @@ function createBlockedPublishResult(
 }
 
 function formatPublishSummary(result: PublishResult, dryRun: boolean): string {
-  if (dryRun) return "DryRun(未发布)";
   if (result.status === "blocked") {
-    return `被质量门禁拦截${result.reason ? `: ${result.reason}` : ""}`;
+    return `已跳过，未生成文章${result.reason ? `: ${result.reason}` : ""}`;
   }
+  if (dryRun) return "DryRun(未发布)";
   if (result.status === "draft") return "已创建草稿";
   if (result.status === "pending") return "发表已提交，等待微信确认";
   if (result.status === "published") return "已发表";

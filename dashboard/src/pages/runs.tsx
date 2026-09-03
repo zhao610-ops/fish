@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { runStatusLabel } from "../api/run-status.ts";
 import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { apiJson } from "../api/client.ts";
+import { ArticleLibraryPanel } from "../components/article-library-panel.tsx";
 import type {
   ArticleRunDetail,
   ArticleRunRecord,
@@ -168,6 +170,7 @@ function RunList(
             <option value="running">running</option>
             <option value="publishing">等待微信发表结果</option>
             <option value="succeeded">succeeded</option>
+            <option value="skipped">已跳过（未生成文章）</option>
             <option value="failed">failed</option>
             <option value="cancelled">cancelled</option>
           </Select>
@@ -194,7 +197,7 @@ function RunList(
                 <div className="shrink-0">
                   <Badge tone={statusTone(run.status)} className="max-w-[86px]">
                     {statusIcon(run.status)}
-                    {run.status}
+                    {runStatusLabel(run.status)}
                   </Badge>
                 </div>
               </div>
@@ -239,6 +242,12 @@ function RunDetail(
   },
 ) {
   const artifacts = useMemo(() => collectArtifacts(run), [run]);
+  const finalArticle = artifacts.find((artifact) =>
+    artifact.key.endsWith("/19-final-article.html")
+  );
+  const rejections = artifacts.find((artifact) =>
+    artifact.key.endsWith("/translation-rejections.json")
+  );
   const relatedMatrixRuns = useMemo(
     () => collectRelatedMatrixRuns(run, allRuns),
     [run, allRuns],
@@ -260,7 +269,7 @@ function RunDetail(
             <div className="mb-2 flex items-center gap-2">
               <Badge tone={statusTone(run.status)}>
                 {statusIcon(run.status)}
-                {run.status}
+                {runStatusLabel(run.status)}
               </Badge>
               <Badge>{run.dryRun ? "dry-run" : "publish"}</Badge>
               {run.runKind && <Badge>{run.runKind}</Badge>}
@@ -300,6 +309,39 @@ function RunDetail(
       </Card>
 
       <PublicationStatusPanel run={run} apiKey={apiKey} />
+      {finalArticle && (
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="tp-title font-semibold">文章已生成</h3>
+              <p className="tp-muted mt-1 text-sm">
+                {run.dryRun
+                  ? "本轮仅生成预览，没有向公众号发布。"
+                  : "可打开完整文章核对内容。"}
+              </p>
+            </div>
+            <Button onClick={() => onPreviewArtifact(finalArticle)}>
+              <Eye className="mr-2 size-4" />查看文章预览
+            </Button>
+          </div>
+        </Card>
+      )}
+      {!finalArticle && run.status === "skipped" && (
+        <Card>
+          <h3 className="tp-title font-semibold">本轮没有生成完整文章</h3>
+          <p className="tp-muted my-2 text-sm">
+            不是预览加载失败；请先检查候选筛选和翻译拒绝原因。
+          </p>
+          {rejections && (
+            <Button
+              variant="ghost"
+              onClick={() => onPreviewArtifact(rejections)}
+            >
+              查看未成稿原因
+            </Button>
+          )}
+        </Card>
+      )}
       <RunFeedbackPanel run={run} apiKey={apiKey} profileId={profileId} />
 
       <MatrixRunPanel
@@ -666,7 +708,9 @@ function MatrixRunPanel(
     ).length;
   const cancelled = relatedRuns.filter((item) => item.status === "cancelled")
     .length;
-  const completed = succeeded + failed + cancelled;
+  const skipped =
+    relatedRuns.filter((item) => item.status === "skipped").length;
+  const completed = succeeded + failed + cancelled + skipped;
   const completion = Math.round((completed / relatedRuns.length) * 100);
   const title = run.runKind === "matrix-parent" ? "矩阵结果" : "同批账号";
 
@@ -682,6 +726,7 @@ function MatrixRunPanel(
         <div className="flex flex-wrap gap-2 text-xs">
           <Badge tone="info">完成 {completion}%</Badge>
           <Badge tone="success">成功 {succeeded}</Badge>
+          <Badge tone="muted">跳过 {skipped}</Badge>
           <Badge tone={failed > 0 ? "danger" : "muted"}>失败 {failed}</Badge>
           <Badge tone={running > 0 ? "info" : "muted"}>进行中 {running}</Badge>
         </div>
@@ -732,7 +777,7 @@ function MatrixRunPanel(
                   <td className="py-2.5 pr-4">
                     <Badge tone={statusTone(item.status)}>
                       {statusIcon(item.status)}
-                      {item.status}
+                      {runStatusLabel(item.status)}
                     </Badge>
                   </td>
                   <td className="py-2.5 pr-4">
@@ -897,6 +942,12 @@ export function RunsWorkspace(
 ) {
   return (
     <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <ArticleLibraryPanel
+        apiKey={apiKey}
+        profileId={profileId}
+        onPreview={onPreviewArtifact}
+        onSelectRun={onSelectRun}
+      />
       <RunList
         runs={runs}
         selectedRunId={selectedRunId}

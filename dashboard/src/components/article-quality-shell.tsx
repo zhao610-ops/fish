@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { runStatusLabel } from "../api/run-status.ts";
 import {
   BrainCircuit,
   ListChecks,
@@ -116,7 +117,7 @@ export function ArticleQualityShell(
                 statusTone(runStatus),
               )}
             >
-              {runStatus ?? "no run"}
+              {runStatusLabel(runStatus)}
             </span>
           </div>
         </div>

@@ -116,7 +116,7 @@ Deno.test("旧版本只留下方案记录时能恢复来源、抓取分组和暂
   );
 });
 
-Deno.test("后台方案不能覆盖部署侧的翻译授权和主题门禁", async () => {
+Deno.test("后台方案不能覆盖部署侧的翻译模式和主题门禁", async () => {
   const store = new SQLiteRuntimeConfigStore(":memory:");
   const config = createConfig();
   config.features.article.translation.allowedTopics = ["编程教程"];
@@ -126,7 +126,6 @@ Deno.test("后台方案不能覆盖部署侧的翻译授权和主题门禁", asy
     translation: {
       mode: "editorial-preview",
       blockedTopics: [],
-      grants: [{ confirmed: true }],
     },
     qualityGate: {
       ...profile.article.qualityGate,
@@ -147,7 +146,9 @@ Deno.test("后台方案不能覆盖部署侧的翻译授权和主题门禁", asy
     resolved.config.features.article.translation.mode,
     "translation",
   );
-  assertEquals(resolved.config.features.article.translation.grants, []);
+  assertEquals(resolved.config.features.article.translation.allowedTopics, [
+    "编程教程",
+  ]);
 });
 
 Deno.test("runtime config seeds article profile and shared capabilities", async () => {

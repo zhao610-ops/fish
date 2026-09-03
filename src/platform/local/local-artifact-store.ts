@@ -15,6 +15,21 @@ import { dirname, join, normalize, relative } from "node:path";
 export class LocalArtifactStore implements ArtifactStore {
   constructor(private readonly baseDir: string) {}
 
+  async listKeys(directory: string): Promise<string[]> {
+    const path = this.resolveKey(directory);
+    const keys: string[] = [];
+    try {
+      for await (const entry of Deno.readDir(path)) {
+        if (entry.isFile && !entry.isSymlink && entry.name.endsWith(".json")) {
+          keys.push(`${directory}/${entry.name}`);
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+    return keys.sort();
+  }
+
   async claimJson(key: string, value: unknown): Promise<boolean> {
     const path = this.resolveKey(key);
     await Deno.mkdir(dirname(path), { recursive: true });

@@ -2,6 +2,7 @@ export type RunStatus =
   | "queued"
   | "running"
   | "publishing"
+  | "skipped"
   | "succeeded"
   | "failed"
   | "cancelled";

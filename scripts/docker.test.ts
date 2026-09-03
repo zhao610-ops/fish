@@ -81,7 +81,7 @@ Deno.test("Docker 配置读取运行变量且所有数据库使用持久化目�
   assertEquals(config.features.article.sources.length, 2);
   assertEquals(config.features.article.dryRun, true);
   assertEquals(config.features.article.publisher.mode, "draft");
-  assertEquals(config.features.article.translation.grants, []);
+  assertEquals(config.features.article.translation.mode, "translation");
   for (
     const path of [
       config.storage.artifacts.outputDir,

@@ -33,7 +33,7 @@ case "${1:-help}" in
       chmod 600 "$CONFIG_DIR/runtime.env"
     fi
     echo "配置目录：${CONFIG_DIR}（已有文件保持不变）"
-    echo "填写 runtime.env 的后台密钥、模型及抓取服务，再配置来源与授权。"
+    echo "填写 runtime.env 的后台密钥、模型及抓取服务，再配置文章来源。"
     ;;
   up)
     require_config
