@@ -6,7 +6,7 @@ services:
     image: trendpublish:local
     container_name: trendpublish
     restart: unless-stopped
-    init: true
+    # 基础镜像已内置 tini，避免再套一层 init 导致进程回收警告。
     stop_grace_period: 60s
     ports:
       - "127.0.0.1:8000:8000"

@@ -2,6 +2,61 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "node:path";
 import dockerConfig from "../trendpublish.config.docker.example.ts";
 import { initializeAppConfig } from "@src/utils/config/app-config.ts";
+import { checkDockerHealth } from "./docker-healthcheck.ts";
+
+Deno.test("Docker 健康检查验证鉴权和方案接口，拒绝假健康", async () => {
+  for (const status of [200, 500, 401]) {
+    const paths: string[] = [];
+    const request: typeof fetch = (input, init) => {
+      assertEquals(
+        new Headers(init?.headers).get("Authorization"),
+        "Bearer test-only-key",
+      );
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      return Promise.resolve(
+        path === "/api/health"
+          ? Response.json({ ok: true })
+          : Response.json({ profiles: [{ id: "test" }] }, { status }),
+      );
+    };
+    assertEquals(
+      await checkDockerHealth(
+        "http://localhost:8000",
+        "test-only-key",
+        request,
+      ),
+      status === 200,
+    );
+    assertEquals(paths, [
+      "/api/health",
+      "/api/config/features/article/profiles",
+    ]);
+  }
+});
+
+Deno.test("Docker 健康检查拒绝空方案、无效响应和网络异常", async () => {
+  for (const value of [{ profiles: [] }, { ok: false }, null]) {
+    const request: typeof fetch = (input) =>
+      Promise.resolve(
+        Response.json(
+          String(input).endsWith("/api/health") ? { ok: true } : value,
+        ),
+      );
+    assertEquals(
+      await checkDockerHealth("http://localhost:8000", "test", request),
+      false,
+    );
+  }
+  assertEquals(
+    await checkDockerHealth(
+      "http://localhost:8000",
+      "test",
+      () => Promise.reject(new Error("断网")),
+    ),
+    false,
+  );
+});
 
 Deno.test("Docker 配置读取运行变量且所有数据库使用持久化目录", async () => {
   const values: Record<string, string> = {
@@ -87,6 +142,7 @@ Deno.test("Docker 默认不暴露公网端口，密钥排除镜像且停止不�
   assertStringIncludes(compose, "./config/runtime.env");
   assertStringIncludes(compose, "article-data:/app/src/temp");
   assertStringIncludes(compose, "create_host_path: false");
+  assertEquals(/^\s*init:\s*true/m.test(compose), false);
   assertStringIncludes(ignore, "config/");
   assertStringIncludes(script, "--dry-run");
   assertEquals(script.includes("down -v"), false);

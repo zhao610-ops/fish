@@ -41,6 +41,9 @@ Jina。预览不需要公众号凭证，但模型和抓取调用可能收费。 
 中配置已核实的翻译转载授权。空授权列表不会发表任何文章，示例中的域名不是可直接使用的来源。详见
 [全文翻译与发布配置](translation-publishing.md)。
 
+例如 `ARTICLE_SOURCES=https://example.org/articles,https://example.net/feed`，
+等号右侧不要再粘贴一次 `ARTICLE_SOURCES=`；示例地址须换成你已获授权的真实来源。
+
 ## 3. 构建并启动
 
 ```bash
@@ -120,6 +123,10 @@ docker compose start trendpublish
   8000。
 - 容器变为 unhealthy：查看
   `logs`；缺配置时程序以非零状态退出，不会假装启动成功。
+- 来源格式错误：检查 `runtime.env` 中 `ARTICLE_SOURCES`
+  的等号右侧是否重复了变量名。 修正后执行 `restart`，不需要删除数据库或数据卷。
+- 旧版本初始化中断：新版本会保留已有编辑并补齐缺失配置；恢复出的定时任务默认暂停，
+  请在后台核对来源、授权和仅预览设置后再自行启用。
 - 修改主题或授权后未生效：执行
   `restart`。后台已有方案和定时规则仍以数据库为准，应在后台修改。
 - Mac 休眠后定时不执行：Docker

@@ -56,6 +56,11 @@ export function parseSourceInput(rawSource: string): ParsedArticleSource {
   if (!raw) {
     throw new Error("数据源不能为空字符串");
   }
+  if (raw.startsWith("ARTICLE_SOURCES=")) {
+    throw new Error(
+      "ARTICLE_SOURCES 的值重复包含变量名；等号右侧只填写网址，多个网址用英文逗号分隔",
+    );
+  }
 
   if (isHttpUrl(raw)) {
     return { raw, group: "default", url: raw, kind: "url" };

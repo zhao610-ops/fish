@@ -42,15 +42,18 @@ export async function seedArticleRuntimeConfig(
   store: RuntimeConfigStore,
   baseConfig: ResolvedTrendPublishConfig,
 ): Promise<void> {
+  // 先校验部署配置，避免写入半成品后在下次启动时误判为初始化完成。
+  const article = baseConfig.features.article;
+  const sources = parseSourcesForRuntime(article.sources);
+  const fetchGroups = normalizeFetchGroups(baseConfig.fetchGroups);
   await store.ensureSchema();
   const existing = await store.getFeatureProfile(ARTICLE_FEATURE_KEY);
-  if (existing) {
+  if (existing && await store.getSchedule(existing.id)) {
     await seedWeixinAccountProfiles(store, baseConfig);
     await migrateLegacyArticleRuntimeConfig(store);
     return;
   }
 
-  const article = baseConfig.features.article;
   const capabilities: CapabilityProfile[] = [
     {
       id: DEFAULT_LLM_CAPABILITY_ID,
@@ -133,10 +136,12 @@ export async function seedArticleRuntimeConfig(
   ];
 
   for (const capability of capabilities) {
-    await store.saveCapabilityProfile(capability);
+    if (!await store.getCapabilityProfile(capability.id)) {
+      await store.saveCapabilityProfile(capability);
+    }
   }
 
-  const profile = await store.saveFeatureProfile({
+  const profile = existing ?? await store.saveFeatureProfile({
     id: DEFAULT_ARTICLE_PROFILE_ID,
     featureKey: ARTICLE_FEATURE_KEY,
     name: "默认微信文章",
@@ -148,25 +153,25 @@ export async function seedArticleRuntimeConfig(
     updatedAt: "",
   });
 
-  await store.replaceArticleSources(
-    profile.id,
-    parseSourcesForRuntime(article.sources),
-  );
-  await store.replaceArticleFetchGroups(
-    profile.id,
-    normalizeFetchGroups(baseConfig.fetchGroups),
-  );
+  // 恢复旧版本或中途失败的初始化时，只补齐缺失项，保留用户编辑。
+  if ((await store.listArticleSources(profile.id)).length === 0) {
+    await store.replaceArticleSources(profile.id, sources);
+  }
+  if (Object.keys(await store.getArticleFetchGroups(profile.id)).length === 0) {
+    await store.replaceArticleFetchGroups(profile.id, fetchGroups);
+  }
+  await seedWeixinAccountProfiles(store, baseConfig);
+  await migrateLegacyArticleRuntimeConfig(store);
+  // 最后创建定时配置作为完成标志；恢复出的定时默认暂停，避免意外执行。
   await store.saveSchedule({
     featureKey: ARTICLE_FEATURE_KEY,
     profileId: profile.id,
     name: "默认微信文章定时",
-    enabled: true,
+    enabled: !existing,
     cron: DEFAULT_CRON,
     timezone: DEFAULT_TIMEZONE,
     dryRun: article.dryRun,
   });
-  await seedWeixinAccountProfiles(store, baseConfig);
-  await migrateLegacyArticleRuntimeConfig(store);
 }
 
 async function seedWeixinAccountProfiles(

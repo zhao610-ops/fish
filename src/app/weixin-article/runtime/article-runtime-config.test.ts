@@ -19,6 +19,103 @@ import {
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
 
+Deno.test("初始化先校验来源，错误配置不留下方案或能力记录", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  config.features.article.sources = ["ARTICLE_SOURCES=https://example.com"];
+  await assertRejects(
+    () => seedArticleRuntimeConfig(store, config),
+    Error,
+    "重复包含变量名",
+  );
+  assertEquals(await store.listFeatureProfiles("article"), []);
+  assertEquals(await store.listCapabilityProfiles(), []);
+  await seedArticleRuntimeConfig(store, createConfig());
+  const profile = await store.getFeatureProfile("article");
+  assert(profile);
+  assertEquals((await store.getSchedule(profile.id))?.enabled, true);
+});
+
+Deno.test("初始化中断后补齐缺失项，保留已有编辑且恢复的定时暂停", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  const replaceGroups = store.replaceArticleFetchGroups.bind(store);
+  store.replaceArticleFetchGroups = () =>
+    Promise.reject(new Error("模拟写入中断"));
+  await assertRejects(
+    () => seedArticleRuntimeConfig(store, config),
+    Error,
+    "模拟写入中断",
+  );
+  const profile = await store.getFeatureProfile("article");
+  assert(profile);
+  assertEquals(await store.getSchedule(profile.id), null);
+  await store.saveFeatureProfile({ ...profile, name: "保留自定义方案" });
+  const llm = await store.getCapabilityProfile(DEFAULT_LLM_CAPABILITY_ID);
+  assert(llm);
+  await store.saveCapabilityProfile({
+    ...llm,
+    config: { model: "custom-model" },
+  });
+  await store.replaceArticleSources(
+    profile.id,
+    parseSourcesForRuntime(["https://example.org/custom"]),
+  );
+  store.replaceArticleFetchGroups = replaceGroups;
+  await seedArticleRuntimeConfig(store, config);
+  assertEquals(
+    (await store.getFeatureProfile("article"))?.name,
+    "保留自定义方案",
+  );
+  assertEquals(
+    (await store.getCapabilityProfile(llm.id))?.config.model,
+    "custom-model",
+  );
+  assertEquals(
+    (await store.listArticleSources(profile.id))[0].url,
+    "https://example.org/custom",
+  );
+  assertEquals((await store.getArticleFetchGroups(profile.id)).web, [
+    "firecrawl",
+    "jina",
+  ]);
+  const schedule = await store.getSchedule(profile.id);
+  assert(schedule);
+  assertEquals(schedule.enabled, false);
+  await store.saveSchedule({ ...schedule, cron: "30 9 * * *", dryRun: true });
+  const savedSchedule = await store.getSchedule(profile.id);
+  await seedArticleRuntimeConfig(store, config);
+  assertEquals(await store.getSchedule(profile.id), savedSchedule);
+});
+
+Deno.test("旧版本只留下方案记录时能恢复来源、抓取分组和暂停的定时", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  const replaceSources = store.replaceArticleSources.bind(store);
+  store.replaceArticleSources = () =>
+    Promise.reject(new Error("模拟旧版本中断"));
+  await assertRejects(
+    () => seedArticleRuntimeConfig(store, config),
+    Error,
+    "模拟旧版本中断",
+  );
+  store.replaceArticleSources = replaceSources;
+  await seedArticleRuntimeConfig(store, config);
+  const profile = await store.getFeatureProfile("article");
+  assert(profile);
+  assertEquals((await store.listArticleSources(profile.id)).length, 1);
+  assertEquals((await store.getSchedule(profile.id))?.enabled, false);
+  const brokenConfig = createConfig();
+  brokenConfig.features.article.sources = [
+    "ARTICLE_SOURCES=https://example.com",
+  ];
+  await assertRejects(
+    () => seedArticleRuntimeConfig(store, brokenConfig),
+    Error,
+    "重复包含变量名",
+  );
+});
+
 Deno.test("后台方案不能覆盖部署侧的翻译授权和主题门禁", async () => {
   const store = new SQLiteRuntimeConfigStore(":memory:");
   const config = createConfig();
