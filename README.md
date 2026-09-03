@@ -24,19 +24,21 @@
 
 ## 快速开始
 
-需要 Deno
-2、本地持久化磁盘，以及自行配置的模型与全文抓取服务。正式发表还需要具备对应接口权限的公众号。
+推荐使用 Docker，宿主机无需安装 Deno 或 Node.js。Mac 上先启动 Docker Desktop。
+模型与全文抓取服务需要自行配置，正式发表还需要具备对应接口权限的公众号。
 
 在本项目目录执行：
 
 ```bash
-cp trendpublish.config.example.ts trendpublish.config.ts
-# 编辑配置：填写模型、抓取服务、授权来源和公众号信息
-deno task doctor
-deno task article --dry-run
+sh scripts/docker.sh init
+# 填写 config 目录中的密钥、来源与翻译授权
+sh scripts/docker.sh up
+sh scripts/docker.sh doctor
+sh scripts/docker.sh preview
 ```
 
 示例默认仅预览，授权列表为空，不能直接发表。完整步骤见
+[Docker 运行指南](docs/docker.md) 和
 [全文翻译与发布配置](docs/translation-publishing.md)。
 
 预览通过后，填写自有封面素材 ID，核实平台 AI
@@ -44,19 +46,23 @@ deno task article --dry-run
 [定时自动发表](docs/automatic-publishing.md)。
 
 ```bash
-# 本地开发：后端和后台页面热更新
-deno task dev
+# 查看容器状态和日志
+sh scripts/docker.sh status
+sh scripts/docker.sh logs
 
-# 常驻部署：先填写 config/trendpublish.config.ts
-docker compose up -d --build
+# 修改配置后重建容器，保留数据
+sh scripts/docker.sh restart
 
-# 测试与完整工程检查
-deno task test
-deno task verify
+# 停止，不删除数据卷
+sh scripts/docker.sh stop
 ```
 
-本地开发后台为 `http://localhost:5173/dashboard/`，Docker 后台为
-`http://localhost:8000/dashboard/`。请设置独立的后台访问密钥，勿暴露未保护的服务。
+Docker 后台为 `http://localhost:8000/dashboard/`，默认只监听本机。
+后台访问密钥由自己设置。文章、数据库和发送占位保存在 Docker
+持久化数据卷中，停止或重建容器不会清空。
+
+保留原生开发方式：安装 Deno 2，复制根目录配置示例并填写后执行
+`deno task dev`；开发后台为 `http://localhost:5173/dashboard/`。
 
 ## 关键配置
 

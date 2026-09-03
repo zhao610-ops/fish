@@ -616,7 +616,6 @@ const handler = async (req: Request): Promise<Response> => {
 export default async function startServer(port = 8000) {
   Deno.serve({ port }, handler);
   logger.info(`服务监听在 http://0.0.0.0:${port}`);
-  logger.info("dashboard 地址: http://localhost:8000/dashboard");
-  const config = await getAppConfig();
-  logger.info("api key: " + config.server.apiKey);
+  logger.info(`dashboard 地址: http://localhost:${port}/dashboard`);
+  logger.info("后台访问密钥已从配置加载，不在日志中输出。");
 }

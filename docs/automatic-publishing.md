@@ -70,15 +70,14 @@ features: {
 Compose 从当前项目构建镜像：
 
 ```bash
-mkdir -p config data/temp
-cp trendpublish.config.docker.example.ts config/trendpublish.config.ts
+sh scripts/docker.sh init
 # 填写配置后执行
-docker compose up -d --build
-docker compose logs -f trendpublish
+sh scripts/docker.sh up
+sh scripts/docker.sh logs
 ```
 
-后台默认地址为
-`http://服务器地址:8000/dashboard/`。镜像内置后台页面并直接运行后端常驻服务。`restart: unless-stopped`
+详细步骤和备份方法见 [Docker 运行指南](docker.md)。后台默认地址为
+`http://localhost:8000/dashboard/`，只监听本机。镜像内置后台页面并直接运行后端常驻服务。`restart: unless-stopped`
 处理容器异常退出后的重启，服务器和 Docker 仍需持续运行。
 
 本地开发使用

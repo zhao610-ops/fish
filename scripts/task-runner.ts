@@ -3,6 +3,8 @@ import { Command } from "@cliffy/command";
 const DENO = Deno.execPath();
 
 const CHECK_FILES = [
+  "scripts/docker-healthcheck.ts",
+  "scripts/docker-warmup.ts",
   "src/index.ts",
   "src/apps/weixin-relay/server.ts",
   "scripts/run.workflow.ts",
@@ -17,6 +19,7 @@ const CHECK_FILES = [
 ];
 
 const TEST_FILES = [
+  "scripts/docker.test.ts",
   "src/integrations/fetch/providers/firecrawl-original.test.ts",
   "src/features/weixin-article/services/translation.service.test.ts",
   "src/features/weixin-article/translation-workflow.test.ts",

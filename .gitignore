@@ -48,6 +48,7 @@ Thumbs.db
 .env
 trendpublish.config.ts
 config/trendpublish.config.ts
+config/runtime.env
 .env.local
 .env.*.local
 

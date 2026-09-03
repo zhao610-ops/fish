@@ -1,4 +1,4 @@
-// 这个示例可以放在项目根目录，也可以复制到 config/trendpublish.config.ts。
+// Docker 启动脚本复制到 config/trendpublish.config.ts；密钥由 Compose 注入。
 import { defineConfig } from "@src/utils/config/define-config.ts";
 
 function splitList(value: string): string[] {
@@ -122,6 +122,10 @@ export default defineConfig((runtime) => ({
     vector: {
       provider: "sqlite",
       sqlitePath: "src/temp/trendpublish.sqlite3",
+    },
+    runtimeConfig: {
+      provider: "sqlite",
+      sqlitePath: "src/temp/runtime-config.sqlite3",
     },
   },
 }));

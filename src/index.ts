@@ -16,7 +16,10 @@ async function bootstrap() {
   Logger.level = LogLevel.INFO;
 
   await startCronJobs();
-  startServer(config.server.port);
+  await startServer(config.server.port);
 }
 
-bootstrap().catch(console.error);
+bootstrap().catch((error) => {
+  console.error(error);
+  Deno.exit(1);
+});

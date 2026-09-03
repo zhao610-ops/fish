@@ -1,13 +1,41 @@
+name: wx-translator
+
 services:
   trendpublish:
     build: .
     image: trendpublish:local
     container_name: trendpublish
     restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./config/runtime.env
     environment:
+      TZ: Asia/Shanghai
       TRENDPUBLISH_CONFIG: /app/config/trendpublish.config.ts
     volumes:
-      - ./config/trendpublish.config.ts:/app/config/trendpublish.config.ts:ro
-      - ./data/temp:/app/src/temp
+      - type: bind
+        source: ./config/trendpublish.config.ts
+        target: /app/config/trendpublish.config.ts
+        read_only: true
+        bind:
+          create_host_path: false
+      - article-data:/app/src/temp
+    healthcheck:
+      test: ["CMD", "deno", "run", "-A", "scripts/docker-healthcheck.ts"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  article-data:

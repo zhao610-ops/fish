@@ -48,116 +48,31 @@ deno task verify              # 发布前完整验证
 
 ## Docker 部署
 
-Docker 推荐直接使用 GitHub Actions 发布到 GHCR 的镜像，不在服务器上构建：
+使用当前代码本地构建镜像，完整步骤见
+[Docker 运行指南](docker.md)。无需在宿主机安装 Deno。
 
 ```bash
-docker pull ghcr.io/liyown/ai-trend-publish:latest
+sh scripts/docker.sh init
+# 填写 config 目录中的模型、抓取、来源及授权配置
+sh scripts/docker.sh up
+sh scripts/docker.sh doctor
+sh scripts/docker.sh preview
 ```
 
-准备配置和数据目录：
+默认后台为
+`http://localhost:8000/dashboard/`，只监听本机。后台密钥自行设置，默认只预览，不会公开发表。
+
+容器以非 root
+用户运行，配置只读挂载，SQLite、文章和发送占位保存在命名数据卷中。重新创建容器保留数据；旧宿主机数据不会自动迁移，升级前先备份。
 
 ```bash
-mkdir -p config data/temp
-cp trendpublish.config.docker.example.ts config/trendpublish.config.ts
+sh scripts/docker.sh logs
+sh scripts/docker.sh restart
+sh scripts/docker.sh stop
 ```
 
-编辑 `config/trendpublish.config.ts` 后启动：
-
-```bash
-deno task docker
-deno task docker logs
-```
-
-等价的 compose 核心配置是：
-
-```yaml
-services:
-  trendpublish:
-    image: ghcr.io/liyown/ai-trend-publish:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config/trendpublish.config.ts:/app/config/trendpublish.config.ts:ro
-      - ./data/temp:/app/src/temp
-```
-
-容器默认读取：
-
-```text
-/app/config/trendpublish.config.ts
-```
-
-如果配置文件没有挂载，服务会直接报错退出，避免用空配置启动。
-
-### Docker 配置密钥
-
-简单部署可以直接把密钥写进挂载配置。需要动态读取时使用配置函数：
-
-```ts
-import { defineConfig } from "@src/utils/config/define-config.ts";
-
-export default defineConfig((runtime) => ({
-  server: {
-    apiKey: runtime.required("SERVER_API_KEY"),
-  },
-  providers: {
-    ai: {
-      baseUrl: runtime.value("AI_BASE_URL", "https://api.deepseek.com/v1"),
-      apiKey: runtime.required("AI_API_KEY"),
-      model: runtime.value("AI_MODEL", "deepseek-chat"),
-    },
-  },
-  features: {
-    article: {
-      dryRun: true,
-      sources: ["https://news.ycombinator.com/"],
-    },
-  },
-}));
-```
-
-读取规则：
-
-- `runtime.value(name, fallback)`：读取运行值，缺失时使用 fallback。
-- `runtime.secret(name, fallback)`：Docker 中优先读取 `/run/secrets/<name>`。
-- `runtime.required(name)`：缺失时启动失败。
-
-### Docker 真实发布
-
-固定 IP 服务器可以直连微信：
-
-```ts
-providers: {
-  publish: {
-    weixin: {
-      appId: "your_app_id",
-      appSecret: "your_app_secret",
-    },
-  },
-},
-features: {
-  article: {
-    publisher: { provider: "weixin" },
-    dryRun: false,
-  },
-},
-```
-
-多公众号时，把微信凭证放进 `accounts`，运行时在 Dashboard 的 `账号矩阵`
-维护账号定位和默认文章方案：
-
-```ts
-providers: {
-  publish: {
-    weixin: {
-      accounts: {
-        main: { appId: "main_app_id", appSecret: "main_secret" },
-        lab: { appId: "lab_app_id", appSecret: "lab_secret" },
-      },
-    },
-  },
-},
-```
+真实发表前仍需核实公众号接口权限、配置出口 IP 白名单、自有封面、转载授权与平台
+AI 标识，参见 [全文翻译与发布配置](translation-publishing.md)。
 
 ## Cloudflare 部署
 
